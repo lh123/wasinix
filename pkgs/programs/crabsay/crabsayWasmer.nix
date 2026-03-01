@@ -7,7 +7,7 @@ makeWasmerPackage {
       name = "crabsay";
       module = "crabsay";
       wasm = "crabsay.wasm";
-      output = "crabsay.wasmer";
+      output = "crabsay.wasm";
     }
   ];
 }

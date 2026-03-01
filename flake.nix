@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    self.submodules = true;
   };
 
   outputs = { nixpkgs, ... }:
@@ -18,7 +19,7 @@
         cargo-wasix = wasix.toolchain.cargoWasix;
         wasix-rust-toolchain = wasix.toolchain.wasixRustToolchain;
         inherit (wasix.libs) ncursesLib;
-        inherit (wasix.programs) nano grep sed find gzip tar ncurses crabsay;
+        inherit (wasix.programs) nano grep sed find gzip tar ncurses crabsay phpPhpix83 phpixPhp83;
       };
 
       wasmer = wasix.wasmer.packages;
@@ -49,6 +50,9 @@
           wasixAll = wasix.allWasm;
           wasmerAll = wasix.wasmer.allWasmer;
           default = wasix.allWasm;
+
+          cargo-wasix = wasix.toolchain.cargoWasix;
+          wasixcc = wasix.toolchain.wasixcc;
         };
     };
 }

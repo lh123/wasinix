@@ -7,7 +7,7 @@ makeWasmerPackage {
       name = "nano";
       module = "nano";
       wasm = "nano.wasm";
-      output = "nano.wasmer";
+      output = "nano.wasm";
     }
   ];
 }

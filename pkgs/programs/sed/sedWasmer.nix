@@ -10,7 +10,7 @@ makeWasmerPackage {
       name = "sed";
       module = "sed";
       wasm = "sed.wasm";
-      output = "sed.wasmer";
+      output = "sed.wasm";
     }
   ];
 }

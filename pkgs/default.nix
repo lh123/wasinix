@@ -90,6 +90,10 @@ let
     inherit makeWasmerPackage;
     crabsay = programs.crabsay;
   };
+  phpixPhp83Wasmer = pkgs.callPackage ./programs/phpix/phpixPhp83Wasmer.nix {
+    inherit makeWasmerPackage;
+    phpixPhp83 = programs.phpixPhp83;
+  };
 
   cliPlatformWasmer = pkgs.callPackage ./wasmer/cli-platform.nix {
     inherit makePlainWasmerPackage;
@@ -97,7 +101,7 @@ let
 
   wasmer = import ./wasmer {
     inherit (pkgs) lib;
-    inherit pkgs nanoWasmer grepWasmer sedWasmer findWasmer gzipWasmer tarWasmer ncursesWasmer crabsayWasmer cliPlatformWasmer;
+    inherit pkgs nanoWasmer grepWasmer sedWasmer findWasmer gzipWasmer tarWasmer ncursesWasmer crabsayWasmer phpixPhp83Wasmer cliPlatformWasmer;
   };
 
   allPackages = libs // programs;

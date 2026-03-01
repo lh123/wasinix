@@ -1,5 +1,5 @@
 { nixpkgs, pkgs, pkgsCross, toolchain, libs }:
-{
+rec {
   nano = pkgsCross.callPackage ./nano/nano.nix {
     inherit nixpkgs toolchain;
     ncurses = libs.ncursesLib;
@@ -25,5 +25,14 @@
 
   crabsay = pkgs.callPackage ./crabsay/crabsay.nix {
     cargoWasix = toolchain.cargoWasix;
+  };
+
+  phpPhpix83 = pkgs.callPackage ./php/phpPhpix83.nix {
+    inherit toolchain;
+  };
+
+  phpixPhp83 = pkgs.callPackage ./phpix/phpixPhp83.nix {
+    cargoWasix = toolchain.cargoWasix;
+    inherit toolchain phpPhpix83;
   };
 }

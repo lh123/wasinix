@@ -10,19 +10,19 @@ makeWasmerPackage {
       name = "clear";
       module = "clear";
       wasm = "clear.wasm";
-      output = "clear.wasmer";
+      output = "clear.wasm";
     }
     {
       name = "reset";
       module = "reset";
       wasm = "reset.wasm";
-      output = "reset.wasmer";
+      output = "reset.wasm";
     }
     {
       name = "tput";
       module = "tput";
       wasm = "tput.wasm";
-      output = "tput.wasmer";
+      output = "tput.wasm";
     }
   ];
 }

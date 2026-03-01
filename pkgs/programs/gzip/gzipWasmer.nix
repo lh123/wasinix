@@ -10,20 +10,20 @@ makeWasmerPackage {
       name = "gzip";
       module = "gzip";
       wasm = "gzip.wasm";
-      output = "gzip.wasmer";
+      output = "gzip.wasm";
     }
     {
       name = "gunzip";
       module = "gunzip";
       wasm = "gzip.wasm";
-      output = "gunzip.wasmer";
+      output = "gunzip.wasm";
       mainArgs = [ "-d" "-f" ];
     }
     {
       name = "zcat";
       module = "zcat";
       wasm = "gzip.wasm";
-      output = "zcat.wasmer";
+      output = "zcat.wasm";
       mainArgs = [ "-d" "-c" "-f" ];
     }
   ];

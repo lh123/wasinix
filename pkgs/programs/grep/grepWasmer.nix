@@ -10,7 +10,7 @@ makeWasmerPackage {
       name = "grep";
       module = "grep";
       wasm = "grep.wasm";
-      output = "grep.wasmer";
+      output = "grep.wasm";
     }
   ];
 }

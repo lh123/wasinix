@@ -10,7 +10,7 @@ makeWasmerPackage {
       name = "find";
       module = "find";
       wasm = "find.wasm";
-      output = "find.wasmer";
+      output = "find.wasm";
     }
   ];
 }
