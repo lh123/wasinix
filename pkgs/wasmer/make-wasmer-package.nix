@@ -4,6 +4,8 @@
   name ? (package.pname or package.name or "package"),
   owner ? "wasmer",
   version ? (package.version or "0.0.0"),
+  license ? null,
+  entrypoint ? null,
   description ? (
     if package ? meta && package.meta ? description && package.meta.description != null then
       package.meta.description
@@ -23,11 +25,12 @@ let
           commandName = cmd.name;
           moduleName = cmd.module or commandName;
           wasmFile = cmd.wasm or "${commandName}.wasm";
-          outputFile = cmd.output or "${commandName}.wasmer";
+          outputFile = cmd.output or "${commandName}.wasm";
           runner = cmd.runner or defaultRunner;
           mainArgs = builtins.toJSON (cmd.mainArgs or null);
+          atom = builtins.toJSON (cmd.atom or moduleName);
         in
-        "${commandName}|${moduleName}|${wasmFile}|${outputFile}|${runner}|${mainArgs}"
+        "${commandName}|${moduleName}|${wasmFile}|${outputFile}|${runner}|${mainArgs}|${atom}"
       ) commands;
 in
 pkgs.runCommand "wasmer-package-${name}" { } ''
@@ -36,12 +39,15 @@ pkgs.runCommand "wasmer-package-${name}" { } ''
   pkg_dir="$out/pkg/${name}"
   bin_dir="$pkg_dir/bin"
   mkdir -p "$bin_dir"
+  declare -A module_seen
 
   cat > "$pkg_dir/wasmer.toml" <<EOF
 [package]
 name = ${builtins.toJSON "${owner}/${name}"}
 version = ${builtins.toJSON version}
 description = ${builtins.toJSON description}
+${if license == null then "" else "license = ${builtins.toJSON license}"}
+${if entrypoint == null then "" else "entrypoint = ${builtins.toJSON entrypoint}"}
 EOF
 
   append_command() {
@@ -50,24 +56,39 @@ EOF
     module_file="$3"
     runner="$4"
     main_args_json="$5"
+    atom_json="$6"
 
-    cat >> "$pkg_dir/wasmer.toml" <<EOF
+    if [ -z "''${module_seen[$module_name]+x}" ]; then
+      module_seen["$module_name"]=1
+      cat >> "$pkg_dir/wasmer.toml" <<EOF
 
 [[module]]
 name = "$module_name"
 source = "bin/$module_file"
+EOF
+    fi
 
+    cat >> "$pkg_dir/wasmer.toml" <<EOF
 [[command]]
 name = "$command_name"
 module = "$module_name"
 runner = "$runner"
 EOF
 
-    if [ "$main_args_json" != "null" ]; then
+    if [ "$main_args_json" != "null" ] || [ "$atom_json" != "null" ]; then
       cat >> "$pkg_dir/wasmer.toml" <<EOF
 [command.annotations.wasi]
+EOF
+      if [ "$atom_json" != "null" ]; then
+        cat >> "$pkg_dir/wasmer.toml" <<EOF
+atom = $atom_json
+EOF
+      fi
+      if [ "$main_args_json" != "null" ]; then
+        cat >> "$pkg_dir/wasmer.toml" <<EOF
 main-args = $main_args_json
 EOF
+      fi
     fi
   }
 
@@ -79,10 +100,10 @@ EOF
         wasm_file="$(basename "$wasm_path")"
         command_name="''${wasm_file%.wasm}"
         module_name="$command_name"
-        output_file="$command_name.wasmer"
+        output_file="$command_name.wasm"
 
         cp -f "$wasm_path" "$bin_dir/$output_file"
-        append_command "$command_name" "$module_name" "$output_file" "${defaultRunner}" "null"
+        append_command "$command_name" "$module_name" "$output_file" "${defaultRunner}" "null" "\"$module_name\""
       done < <(${pkgs.findutils}/bin/find "${package}/bin" -maxdepth 1 -type f -name '*.wasm' -print0)
     fi
 
@@ -91,7 +112,7 @@ EOF
       exit 1
     fi
   '' else ''
-    while IFS='|' read -r command_name module_name wasm_file output_file runner main_args_json; do
+    while IFS='|' read -r command_name module_name wasm_file output_file runner main_args_json atom_json; do
       [ -n "$command_name" ] || continue
       source_path="${package}/bin/$wasm_file"
       if [ ! -f "$source_path" ]; then
@@ -100,7 +121,7 @@ EOF
       fi
 
       cp -f "$source_path" "$bin_dir/$output_file"
-      append_command "$command_name" "$module_name" "$output_file" "$runner" "$main_args_json"
+      append_command "$command_name" "$module_name" "$output_file" "$runner" "$main_args_json" "$atom_json"
     done <<'EOF'
 ${commandLines}
 EOF
