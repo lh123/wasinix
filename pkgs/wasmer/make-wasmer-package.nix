@@ -14,6 +14,7 @@
   ),
   commands ? null,
   defaultRunner ? "https://webc.org/runner/wasi",
+  metadata ? { },
 }:
 let
   commandLines =
@@ -32,6 +33,16 @@ let
         in
         "${commandName}|${moduleName}|${wasmFile}|${outputFile}|${runner}|${mainArgs}|${atom}"
       ) commands;
+
+  extraMetadataLines =
+    if metadata == { } then
+      ""
+    else
+      lib.concatStringsSep "\n" (
+        lib.mapAttrsToList (k: v:
+          "${builtins.toJSON k} = ${builtins.toJSON v}"
+        ) metadata
+      );
 in
 pkgs.runCommand "wasmer-package-${name}" { } ''
   set -euo pipefail
@@ -48,7 +59,18 @@ version = ${builtins.toJSON version}
 description = ${builtins.toJSON description}
 ${if license == null then "" else "license = ${builtins.toJSON license}"}
 ${if entrypoint == null then "" else "entrypoint = ${builtins.toJSON entrypoint}"}
+public = true
 EOF
+
+  ${if metadata == { } then ""
+    else ''
+      cat >> "$pkg_dir/wasmer.toml" <<EOF
+
+[package.metadata]
+${extraMetadataLines}
+EOF
+    ''
+  }
 
   append_command() {
     command_name="$1"

@@ -23,7 +23,6 @@
       };
 
       wasmer = wasix.wasmer.packages;
-
       legacyPackages.${system} = {
         pkgsCross = {
           wasix = wasix.pkgsCross;

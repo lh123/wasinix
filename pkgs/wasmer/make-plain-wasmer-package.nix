@@ -8,6 +8,7 @@
   entrypoint ? null,
   dependencies ? { },
   commands ? [ ],
+  metadata ? { },
 }:
 let
   dependencyLines =
@@ -28,6 +29,16 @@ let
     in
     "${commandName}|${moduleName}|${runner}"
   ) commands;
+
+  extraMetadataLines =
+    if metadata == { } then
+      ""
+    else
+      lib.concatStringsSep "\n" (
+        lib.mapAttrsToList (k: v:
+          "${builtins.toJSON k} = ${builtins.toJSON v}"
+        ) metadata
+      );
 in
 pkgs.runCommand "wasmer-plain-package-${name}" { } ''
   set -euo pipefail
@@ -41,7 +52,18 @@ name = ${builtins.toJSON "${owner}/${packageName}"}
 version = ${builtins.toJSON version}
 description = ${builtins.toJSON description}
 ${if entrypoint == null then "" else "entrypoint = ${builtins.toJSON entrypoint}"}
+public = true
 EOF
+
+  ${if metadata == { } then ""
+    else ''
+      cat >> "$pkg_dir/wasmer.toml" <<EOF
+
+[package.metadata]
+${extraMetadataLines}
+EOF
+    ''
+  }
 
   ${if dependencies == { } then ""
     else ''

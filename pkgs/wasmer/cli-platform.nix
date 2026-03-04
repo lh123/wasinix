@@ -1,6 +1,6 @@
 { makePlainWasmerPackage }:
 makePlainWasmerPackage {
-  name = "wasmer/cli-platform";
+  name = "cli-platform";
   packageName = "cli";
   version = "0.1.2";
   description = "CLI platform - a wrapper package with many common tools, useful for interactive environments.";
