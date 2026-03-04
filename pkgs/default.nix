@@ -105,15 +105,16 @@ let
   };
 
   allPackages = libs // programs;
+  allWasmPackages = pkgs.lib.removeAttrs allPackages [ "phpixPhp83" ];
 
   allWasm = pkgs.runCommand "wasix-all-wasm" { } ''
     mkdir -p "$out/bin"
     ${pkgs.lib.concatMapStringsSep "\n" (name: ''
-      if [ -d "${allPackages.${name}}/bin" ]; then
-        ${pkgs.findutils}/bin/find "${allPackages.${name}}/bin" -maxdepth 1 -type f -name '*.wasm' \
+      if [ -d "${allWasmPackages.${name}}/bin" ]; then
+        ${pkgs.findutils}/bin/find "${allWasmPackages.${name}}/bin" -maxdepth 1 -type f -name '*.wasm' \
           -exec ${pkgs.coreutils}/bin/cp -f '{}' "$out/bin/" \;
       fi
-    '') (builtins.attrNames allPackages)}
+    '') (builtins.attrNames allWasmPackages)}
   '';
 in
 {
