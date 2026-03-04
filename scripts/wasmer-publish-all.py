@@ -1,0 +1,231 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import subprocess
+import sys
+from collections import deque
+from dataclasses import dataclass
+from pathlib import Path
+from urllib import error, parse, request
+
+try:
+    import tomllib
+except ModuleNotFoundError as exc:
+    raise SystemExit("Python 3.11+ is required (missing tomllib).") from exc
+
+
+@dataclass(frozen=True)
+class Package:
+    full_name: str
+    version: str
+    path: Path
+    deps: set[str]
+
+
+def run(cmd: list[str], *, cwd: Path | None = None, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
+    print(f"+ {' '.join(cmd)}")
+    return subprocess.run(
+        cmd,
+        cwd=str(cwd) if cwd else None,
+        check=True,
+        text=True,
+        capture_output=capture_output,
+    )
+
+
+def normalize_registry_url(registry: str) -> str:
+    registry = registry.strip().rstrip("/")
+    if registry.startswith("http://") or registry.startswith("https://"):
+        return registry
+    return f"https://{registry}"
+
+
+def graphql_endpoint_for_registry(registry: str) -> str:
+    normalized = normalize_registry_url(registry)
+    parsed = parse.urlparse(normalized)
+    if not parsed.netloc:
+        raise SystemExit(f"Invalid registry value: {registry}")
+
+    host = parsed.netloc
+    scheme = parsed.scheme or "https"
+    graphql_host = host if host.startswith("registry.") else f"registry.{host}"
+    return f"{scheme}://{graphql_host}/graphql"
+
+
+def publish_registry_for_wasmer(registry: str) -> str:
+    normalized = normalize_registry_url(registry)
+    parsed = parse.urlparse(normalized)
+    if not parsed.netloc:
+        raise SystemExit(f"Invalid registry value: {registry}")
+
+    host = parsed.netloc
+    if host.startswith("registry."):
+        return host[len("registry.") :]
+    return host
+
+
+def read_packages(pkg_root: Path) -> dict[str, Package]:
+    if not pkg_root.is_dir():
+        raise SystemExit(f"Package directory does not exist: {pkg_root}")
+
+    packages: dict[str, Package] = {}
+    for toml_path in pkg_root.glob("**/wasmer.toml"):
+        pkg_dir = toml_path.parent
+        with toml_path.open("rb") as f:
+            data = tomllib.load(f)
+
+        package = data.get("package", {})
+        full_name = package.get("name")
+        version = package.get("version")
+        if not isinstance(full_name, str) or not isinstance(version, str):
+            raise SystemExit(f"Missing/invalid package.name or package.version in {toml_path}")
+
+        dep_keys = set()
+        deps = data.get("dependencies", {})
+        if isinstance(deps, dict):
+            for dep_name in deps.keys():
+                if isinstance(dep_name, str):
+                    dep_keys.add(dep_name)
+
+        if full_name in packages:
+            raise SystemExit(f"Duplicate package name {full_name} in {toml_path} and {packages[full_name].path / 'wasmer.toml'}")
+
+        packages[full_name] = Package(
+            full_name=full_name,
+            version=version,
+            path=pkg_dir,
+            deps=dep_keys,
+        )
+
+    if not packages:
+        raise SystemExit(f"No packages found under {pkg_root}")
+
+    local_names = set(packages.keys())
+    normalized: dict[str, Package] = {}
+    for name, pkg in packages.items():
+        local_deps = {dep for dep in pkg.deps if dep in local_names}
+        normalized[name] = Package(
+            full_name=pkg.full_name,
+            version=pkg.version,
+            path=pkg.path,
+            deps=local_deps,
+        )
+    return normalized
+
+
+def topo_sort(packages: dict[str, Package]) -> list[Package]:
+    indegree = {name: len(pkg.deps) for name, pkg in packages.items()}
+    dependents: dict[str, set[str]] = {name: set() for name in packages}
+
+    for name, pkg in packages.items():
+        for dep in pkg.deps:
+            dependents[dep].add(name)
+
+    ready = deque(sorted([name for name, deg in indegree.items() if deg == 0]))
+    order: list[str] = []
+
+    while ready:
+        name = ready.popleft()
+        order.append(name)
+        for dependent in sorted(dependents[name]):
+            indegree[dependent] -= 1
+            if indegree[dependent] == 0:
+                ready.append(dependent)
+
+    if len(order) != len(packages):
+        cycle_nodes = sorted([name for name, deg in indegree.items() if deg > 0])
+        raise SystemExit(f"Dependency cycle detected among local packages: {', '.join(cycle_nodes)}")
+
+    return [packages[name] for name in order]
+
+
+def is_published(graphql_url: str, full_name: str, version: str) -> bool:
+    payload = {
+        "query": "query GetPackageVersion($name: String!, $version: String!) { getPackageVersion(name: $name, version: $version) { id } }",
+        "variables": {"name": full_name, "version": version},
+        "operationName": "GetPackageVersion",
+    }
+    req = request.Request(
+        graphql_url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    try:
+        with request.urlopen(req) as resp:
+            body = resp.read().decode("utf-8")
+    except error.HTTPError as exc:
+        raise SystemExit(f"GraphQL request failed ({exc.code}) for {full_name}@{version}: {exc.reason}") from exc
+    except error.URLError as exc:
+        raise SystemExit(f"GraphQL request failed for {full_name}@{version}: {exc.reason}") from exc
+
+    try:
+        doc = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Invalid GraphQL JSON response for {full_name}@{version}: {exc}") from exc
+
+    if "errors" in doc and doc["errors"]:
+        raise SystemExit(f"GraphQL returned errors for {full_name}@{version}: {doc['errors']}")
+
+    data = doc.get("data")
+    if not isinstance(data, dict):
+        raise SystemExit(f"GraphQL response missing data for {full_name}@{version}: {doc}")
+
+    return data.get("getPackageVersion") is not None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Build and publish all Wasmer packages from result/pkg in dependency order.")
+    parser.add_argument(
+        "--registry",
+        required=True,
+        help="Wasmer registry host or URL (e.g. wasmer.io or https://wasmer.io).",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Only print what would be published/skipped; do not publish anything.",
+    )
+    args = parser.parse_args()
+
+    repo_root = Path(__file__).resolve().parents[1]
+    pkg_root = repo_root / "result" / "pkg"
+
+    run(["nix", "build", ".#wasmerAll"], cwd=repo_root)
+
+    packages = read_packages(pkg_root)
+    ordered = topo_sort(packages)
+
+    graphql_url = graphql_endpoint_for_registry(args.registry)
+    publish_registry = publish_registry_for_wasmer(args.registry)
+    print(
+        f"Discovered {len(ordered)} packages. Using registry: {args.registry} "
+        f"(GraphQL: {graphql_url}, publish: {publish_registry})"
+    )
+    if args.dry_run:
+        print("Dry-run mode enabled: no packages will be published.")
+
+    published = 0
+    skipped = 0
+    for pkg in ordered:
+        if is_published(graphql_url, pkg.full_name, pkg.version):
+            print(f"SKIP {pkg.full_name}@{pkg.version} path={pkg.path} already exists")
+            skipped += 1
+            continue
+
+        if args.dry_run:
+            print(f"PUBLISH {pkg.full_name}@{pkg.version} path={pkg.path} (would publish)")
+            published += 1
+            continue
+
+        print(f"PUBLISH {pkg.full_name}@{pkg.version} path={pkg.path}")
+        run(["wasmer", "publish", "--non-interactive", "--registry", publish_registry], cwd=pkg.path)
+        published += 1
+
+    print(f"Done. published={published} skipped={skipped} total={len(ordered)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
