@@ -43,15 +43,15 @@ let
     crossSystem = toolchainEnv.crossSystem;
   };
 
-  libs = import ./libraries {
+  libraries = import ./libraries {
     nixpkgs = nixpkgs;
-    inherit pkgsCross;
+    inherit pkgs pkgsCross;
     inherit toolchain;
   };
 
   programs = import ./programs {
     nixpkgs = nixpkgs;
-    inherit pkgs pkgsCross libs;
+    inherit pkgs pkgsCross libraries;
     inherit toolchain;
   };
 
@@ -108,7 +108,7 @@ let
     inherit pkgs nanoWasmer grepWasmer sedWasmer findWasmer gzipWasmer tarWasmer lessWasmer ncursesWasmer crabsayWasmer phpixPhp83Wasmer cliPlatformWasmer;
   };
 
-  allPackages = libs // programs;
+  allPackages = libraries // programs;
   allWasmPackages = pkgs.lib.removeAttrs allPackages [ "phpixPhp83" ];
 
   allWasm = pkgs.runCommand "wasix-all-wasm" { } ''
@@ -122,5 +122,6 @@ let
   '';
 in
 {
-  inherit pkgs pkgsCross toolchain libs programs wasmer allPackages allWasm;
+  inherit pkgs pkgsCross toolchain libraries programs wasmer allPackages allWasm;
+  libs = libraries;
 }

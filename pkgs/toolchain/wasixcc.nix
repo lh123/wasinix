@@ -12,8 +12,8 @@ let
   src = fetchFromGitHub {
     owner = "wasix-org";
     repo = "wasixcc";
-    rev = "7a4a6f72449e69ff1ebcc92efaf69c0dbbf1b00d";
-    hash = "sha256-ZQIwzkVMY4YL7+9UcmSNy76+tjwf6Wdidp9Rr4i0ZSo=";
+    rev = "f60fd7d03690fc778633b3616caee39015fb8404";
+    hash = "sha256-opTdoRjWIsNDCce2XaUdmn9RwzpesqXusw5QHp5Q8FE=";
   };
 
   cargoToml = builtins.fromTOML (builtins.readFile "${src}/Cargo.toml");

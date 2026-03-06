@@ -1,8 +1,8 @@
-{ nixpkgs, pkgs, pkgsCross, toolchain, libs }:
+{ nixpkgs, pkgs, pkgsCross, toolchain, libraries }:
 rec {
   nano = pkgsCross.callPackage ./nano/nano.nix {
     inherit nixpkgs toolchain;
-    ncurses = libs.ncursesLib;
+    ncurses = libraries.ncursesLib;
   };
   grep = pkgsCross.callPackage ./grep/grep.nix {
     inherit toolchain;
@@ -21,7 +21,7 @@ rec {
   };
   less = pkgsCross.callPackage ./less/less.nix {
     inherit toolchain;
-    ncurses = libs.ncursesLib;
+    ncurses = libraries.ncursesLib;
   };
   ncurses = pkgsCross.callPackage ./ncurses/ncurses.nix {
     inherit nixpkgs toolchain;
@@ -31,12 +31,9 @@ rec {
     cargoWasix = toolchain.cargoWasix;
   };
 
-  phpPhpix83 = pkgs.callPackage ./php/phpPhpix83.nix {
-    inherit toolchain;
-  };
-
   phpixPhp83 = pkgs.callPackage ./phpix/phpixPhp83.nix {
     cargoWasix = toolchain.cargoWasix;
-    inherit toolchain phpPhpix83;
+    inherit toolchain;
+    php83ZTS = libraries.php83ZTS;
   };
 }

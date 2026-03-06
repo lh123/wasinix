@@ -18,8 +18,8 @@
         inherit (wasix.toolchain) wasixcc;
         cargo-wasix = wasix.toolchain.cargoWasix;
         wasix-rust-toolchain = wasix.toolchain.wasixRustToolchain;
-        inherit (wasix.libs) ncursesLib;
-        inherit (wasix.programs) nano grep sed find gzip tar less ncurses crabsay phpPhpix83 phpixPhp83;
+        inherit (wasix.libraries) ncursesLib php83ZTS php85ZTS;
+        inherit (wasix.programs) nano grep sed find gzip tar less ncurses crabsay phpixPhp83;
       };
 
       wasmer = wasix.wasmer.packages;
@@ -33,7 +33,7 @@
         packages = [
           wasix.toolchain.wasixcc
           wasix.toolchain.cargoWasix
-          wasix.libs.ncursesLib
+          wasix.libraries.ncursesLib
           wasix.pkgs.gnumake
           wasix.pkgs.pkg-config
         ];
@@ -52,6 +52,9 @@
 
           cargo-wasix = wasix.toolchain.cargoWasix;
           wasixcc = wasix.toolchain.wasixcc;
+          php83ZTS = wasix.libraries.php83ZTS;
+          php85ZTS = wasix.libraries.php85ZTS;
+          phpixPhp83 = wasix.programs.phpixPhp83;
         };
     };
 }
