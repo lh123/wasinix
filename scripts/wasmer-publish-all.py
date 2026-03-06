@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
+import tempfile
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +23,12 @@ class Package:
     version: str
     path: Path
     deps: set[str]
+
+
+@dataclass(frozen=True)
+class PublishedPackageVersion:
+    exists: bool
+    webc_sha256: str | None
 
 
 def run(cmd: list[str], *, cwd: Path | None = None, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
@@ -140,9 +148,48 @@ def topo_sort(packages: dict[str, Package]) -> list[Package]:
     return [packages[name] for name in order]
 
 
-def is_published(graphql_url: str, full_name: str, version: str) -> bool:
+def normalize_sha256(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip().lower()
+    if len(candidate) != 64:
+        return None
+    if any(ch not in "0123456789abcdef" for ch in candidate):
+        return None
+    return candidate
+
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        while True:
+            chunk = f.read(1024 * 1024)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def build_local_webc_sha256(pkg: Package) -> str:
+    with tempfile.TemporaryDirectory(prefix="wasmer-publish-all-") as tmpdir:
+        out = Path(tmpdir) / "package.webc"
+        run(["wasmer", "package", "build", "--quiet", "--out", str(out), "."], cwd=pkg.path)
+        if not out.is_file():
+            raise SystemExit(f"Expected local .webc output missing for {pkg.full_name}@{pkg.version}: {out}")
+        return sha256_file(out)
+
+
+def get_published_package_version(graphql_url: str, full_name: str, version: str) -> PublishedPackageVersion:
     payload = {
-        "query": "query GetPackageVersion($name: String!, $version: String!) { getPackageVersion(name: $name, version: $version) { id } }",
+        "query": (
+            "query GetPackageVersion($name: String!, $version: String!) { "
+            "getPackageVersion(name: $name, version: $version) { "
+            "id "
+            "distribution { webcSha256Hash piritaSha256Hash } "
+            "packagewebcSet(first: 1) { edges { node { tag webc { webcSha256 } webcV3 { webcSha256 } } } } "
+            "} "
+            "}"
+        ),
         "variables": {"name": full_name, "version": version},
         "operationName": "GetPackageVersion",
     }
@@ -172,7 +219,44 @@ def is_published(graphql_url: str, full_name: str, version: str) -> bool:
     if not isinstance(data, dict):
         raise SystemExit(f"GraphQL response missing data for {full_name}@{version}: {doc}")
 
-    return data.get("getPackageVersion") is not None
+    package_version = data.get("getPackageVersion")
+    if package_version is None:
+        return PublishedPackageVersion(exists=False, webc_sha256=None)
+    if not isinstance(package_version, dict):
+        raise SystemExit(f"GraphQL getPackageVersion has unexpected shape for {full_name}@{version}: {package_version}")
+
+    webc_sha256: str | None = None
+
+    packagewebc_set = package_version.get("packagewebcSet")
+    if isinstance(packagewebc_set, dict):
+        edges = packagewebc_set.get("edges")
+        if isinstance(edges, list):
+            for edge in edges:
+                if not isinstance(edge, dict):
+                    continue
+                node = edge.get("node")
+                if not isinstance(node, dict):
+                    continue
+                webc_v3 = node.get("webcV3")
+                if isinstance(webc_v3, dict):
+                    webc_sha256 = normalize_sha256(webc_v3.get("webcSha256"))
+                if webc_sha256 is None:
+                    webc = node.get("webc")
+                    if isinstance(webc, dict):
+                        webc_sha256 = normalize_sha256(webc.get("webcSha256"))
+                if webc_sha256 is None:
+                    webc_sha256 = normalize_sha256(node.get("tag"))
+                if webc_sha256 is not None:
+                    break
+
+    if webc_sha256 is None:
+        distribution = package_version.get("distribution")
+        if isinstance(distribution, dict):
+            webc_sha256 = normalize_sha256(distribution.get("webcSha256Hash"))
+            if webc_sha256 is None:
+                webc_sha256 = normalize_sha256(distribution.get("piritaSha256Hash"))
+
+    return PublishedPackageVersion(exists=True, webc_sha256=webc_sha256)
 
 
 def main() -> int:
@@ -209,8 +293,23 @@ def main() -> int:
     published = 0
     skipped = 0
     for pkg in ordered:
-        if is_published(graphql_url, pkg.full_name, pkg.version):
-            print(f"SKIP {pkg.full_name}@{pkg.version} path={pkg.path} already exists")
+        published_info = get_published_package_version(graphql_url, pkg.full_name, pkg.version)
+        if published_info.exists:
+            if published_info.webc_sha256 is None:
+                raise SystemExit(
+                    f"Cannot verify published hash for existing {pkg.full_name}@{pkg.version}; "
+                    "registry response did not include a usable SHA-256 hash."
+                )
+            local_webc_sha256 = build_local_webc_sha256(pkg)
+            if local_webc_sha256 != published_info.webc_sha256:
+                raise SystemExit(
+                    f"Hash mismatch for existing package {pkg.full_name}@{pkg.version}: "
+                    f"local={local_webc_sha256} registry={published_info.webc_sha256}"
+                )
+            print(
+                f"SKIP {pkg.full_name}@{pkg.version} path={pkg.path} "
+                f"already exists (hash match: {local_webc_sha256})"
+            )
             skipped += 1
             continue
 
