@@ -14,6 +14,7 @@ makePlainWasmerPackage {
     "wasmer/sed" = "*";
     "wasmer/gzip" = "*";
     "wasmer/tar" = "*";
+    "wasmer/less" = "*";
     "wasmer/ncurses" = "*";
   };
   commands = [

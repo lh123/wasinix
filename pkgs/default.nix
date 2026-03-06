@@ -82,6 +82,10 @@ let
     inherit makeWasmerPackage;
     tar = programs.tar;
   };
+  lessWasmer = pkgs.callPackage ./programs/less/lessWasmer.nix {
+    inherit makeWasmerPackage;
+    less = programs.less;
+  };
   ncursesWasmer = pkgs.callPackage ./programs/ncurses/ncursesWasmer.nix {
     inherit makeWasmerPackage;
     ncurses = programs.ncurses;
@@ -101,7 +105,7 @@ let
 
   wasmer = import ./wasmer {
     inherit (pkgs) lib;
-    inherit pkgs nanoWasmer grepWasmer sedWasmer findWasmer gzipWasmer tarWasmer ncursesWasmer crabsayWasmer phpixPhp83Wasmer cliPlatformWasmer;
+    inherit pkgs nanoWasmer grepWasmer sedWasmer findWasmer gzipWasmer tarWasmer lessWasmer ncursesWasmer crabsayWasmer phpixPhp83Wasmer cliPlatformWasmer;
   };
 
   allPackages = libs // programs;

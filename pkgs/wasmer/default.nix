@@ -1,4 +1,4 @@
-{ lib, pkgs, nanoWasmer, grepWasmer, sedWasmer, findWasmer, gzipWasmer, tarWasmer, ncursesWasmer, crabsayWasmer, phpixPhp83Wasmer, cliPlatformWasmer }:
+{ lib, pkgs, nanoWasmer, grepWasmer, sedWasmer, findWasmer, gzipWasmer, tarWasmer, lessWasmer, ncursesWasmer, crabsayWasmer, phpixPhp83Wasmer, cliPlatformWasmer }:
 let
   packages = {
     nano = nanoWasmer;
@@ -7,6 +7,7 @@ let
     find = findWasmer;
     gzip = gzipWasmer;
     tar = tarWasmer;
+    less = lessWasmer;
     ncurses = ncursesWasmer;
     crabsay = crabsayWasmer;
     phpixPhp83 = phpixPhp83Wasmer;

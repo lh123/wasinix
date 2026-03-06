@@ -19,6 +19,10 @@ rec {
   tar = pkgsCross.callPackage ./tar/tar.nix {
     inherit toolchain;
   };
+  less = pkgsCross.callPackage ./less/less.nix {
+    inherit toolchain;
+    ncurses = libs.ncursesLib;
+  };
   ncurses = pkgsCross.callPackage ./ncurses/ncurses.nix {
     inherit nixpkgs toolchain;
   };
