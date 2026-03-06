@@ -33,6 +33,7 @@ let
   pkgsCross = import nixpkgs {
     inherit system;
     crossSystem = defaultToolchain.crossSystem;
+    config.allowUnsupportedSystem = true;
   };
 
   libraries = lib.mapAttrs (profileName: toolchain:

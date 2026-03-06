@@ -46,7 +46,22 @@ Today the bundled extensions are:
 
 ## 2. Configure
 
-The builder uses `wasixcc` and friends from `toolchain`, then exports a large set of `*_CFLAGS` / `*_LIBS` variables pointing at the `php-wasix-deps` sysroot. This is the main mechanism that wires PHP extensions to the prebuilt WASIX dependency stack.
+The builder uses `wasixcc` and friends from `toolchain`, then exports a large set of `*_CFLAGS` / `*_LIBS` variables derived from the profile-aware shared library set under `pkgs/libraries`. PHP itself no longer depends on the external `php-wasix-deps` repository. Instead, it links against explicit Nix library derivations such as:
+- `zlib`
+- `xz`
+- `libxml2`
+- `sqlite`
+- `openssl`
+- `icu`
+- `libpng`
+- `libjpeg`
+- `freetype`
+- `libwebp`
+- `libzip`
+- `libsodium`
+- `oniguruma`
+- `libpq`
+- `imagemagick`
 
 Important configure characteristics:
 - target is `wasm32-wasi`
@@ -55,7 +70,7 @@ Important configure characteristics:
 - embed SAPI is enabled as `static`
 - CGI and phpdbg are disabled
 - many common extensions are enabled directly at configure time, including `pdo`, `pdo_mysql`, `pdo_pgsql`, `pdo_sqlite`, `mysqli`, `gd`, `intl`, `curl`, `zip`, `mbstring`, `sodium`, `ftp`, `igbinary`, and `imagick`
-- PostgreSQL support is wired explicitly to `${phpWasixDeps}/pgsql-eh`
+- PostgreSQL support is wired through a temporary merged `libpq` prefix built from the `libpq` dev and library outputs, because upstream PHP expects a single prefix for `--with-pgsql`
 
 The configure flags live mostly in `versions.nix`, with version-specific additions layered on top.
 
@@ -88,9 +103,15 @@ With `wasixcc 0.4.x`, `WASM_EXCEPTIONS=yes` selects the exnref EH sysroots (`sys
 
 If opcache regresses, check build configuration before assuming the patch stack is incomplete.
 
-### The dependency sysroot is part of the contract
+### The library set is part of the contract
 
-`php-wasix-deps` is not incidental. The include and library paths exported in `mk-php-zts.nix` are what make the bundled PHP extension set link successfully in the WASIX environment. If you change dependency names, library naming, or directory layout there, expect PHP configure and link behavior to change.
+The PHP builder still depends on a fairly specific dependency surface, but that surface now comes from explicit Nix derivations rather than an external monorepo. If you change library names, output layouts, header locations, or static library names in `pkgs/libraries`, expect PHP configure and link behavior to change.
+
+Two details matter in practice:
+- `mk-php-zts.nix` computes include paths and library search paths directly from each derivation output
+- `phpix` reuses the `phpExtraLibDirs` exported by the PHP derivation, so PHP and `phpix` stay in sync on the link search path
+
+At the moment, the PHP packages are intentionally wired only to the `exnrefEh` library profile. If you add `eh`, `ehpic`, or `exnrefEhpic` PHP builds later, keep the full dependency graph on one profile and do not mix library variants.
 
 ### Bundled extensions are intentionally pinned separately from PHP
 
@@ -112,3 +133,12 @@ Only fork `mk-php-zts.nix` if the build phases or environment really diverge. Re
 ### Validate with real builds
 
 A successful evaluation is not enough here. Small toolchain or exception-model changes can alter configure-time feature detection or runtime behavior. For changes that touch opcache, extensions, toolchain versions, or configure flags, run a real `nix build` for the affected PHP version.
+
+### ImageMagick needs extra scrutiny
+
+`ImageMagick` is the least upstream-clean dependency in the PHP stack right now. Compared to the other PHP libraries, it needs more WASIX-specific handling:
+- a small portability patch around `fork()`
+- removal of target-inappropriate delegate/build dependencies
+- explicit `zstd` headers because the TIFF coder includes `zstd.h` directly
+
+If `imagick` breaks, inspect the `imagemagick` entry in `pkgs/libraries/default.nix` before assuming the PHP builder is wrong.

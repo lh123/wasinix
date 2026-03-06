@@ -46,7 +46,8 @@ stdenvNoCC.mkDerivation {
 
     SYSROOT_PATH="$(wasixccenv -sWASM_EXCEPTIONS=yes print-sysroot)"
     export WASIX_PHP_HOME="${phpPackage}"
-    export WASIX_PHP_EXTRA_LIB_DIR="${phpPackage.phpWasixDeps}/lib-eh:${phpPackage.phpWasixDeps}/pgsql/lib:$SYSROOT_PATH/lib/wasm32-wasi"
+    export WASIX_PHP_EXTRA_LIB_DIR="${lib.concatStringsSep ":" phpPackage.phpExtraLibDirs}:$SYSROOT_PATH/lib/wasm32-wasi"
+    export WASIX_PHP_EXTRA_LIBS="${lib.concatStringsSep ":" phpPackage.phpExtraLinkLibs}"
     export PATH="${toolchain.wasixLlvm}/bin:$SYSROOT_PATH/../../llvm/bin:$PATH"
 
     export LIBCLANG_PATH="${llvmPackages.libclang.lib}/lib"

@@ -41,13 +41,6 @@ let
     "--enable-embed=static"
   ];
 
-  phpWasixDeps = fetchFromGitHub {
-    owner = "wasix-org";
-    repo = "php-wasix-deps";
-    rev = "e1d0878e590c6f10e31e4c14294c617bac1f775c";
-    hash = "sha256-1awrT/rKJHHME+KILCs/TW/1RtfjWTqgkaHIz2FSt9o=";
-  };
-
   commonBundledExtensions = {
     igbinary = {
       src = fetchFromGitHub {
@@ -62,12 +55,9 @@ let
       src = fetchFromGitHub {
         owner = "Imagick";
         repo = "imagick";
-        rev = "52ec37ff633de0e5cca159a6437b8c340afe7831";
-        hash = "sha256-DcZ6a0ANDj8aGsqd/+cSFngeP+tTfKOwVqPDi4hjVqE=";
+        rev = "70087bab33eab913e99ac77d64d04d1a2fd0b7b0";
+        hash = "sha256-d1bRJKAnGyXbcc4Vv8WYtPpL7kPf2XfkXVta7HK+iLA=";
       };
-      patches = [
-        ./patches/extensions/imagick-bundled-build.patch
-      ];
     };
   };
 
@@ -91,12 +81,9 @@ let
       hash = srcHash;
     };
 
-    inherit phpWasixDeps bundledExtensions patches;
+    inherit bundledExtensions patches;
 
-    configureFlags = commonConfigureFlags ++ extraConfigureFlags ++ [
-      "--with-pgsql=${phpWasixDeps}/pgsql-eh"
-      "--with-pdo-pgsql=${phpWasixDeps}/pgsql-eh"
-    ];
+    configureFlags = commonConfigureFlags ++ extraConfigureFlags;
 
     meta = {
       description = "Static PHP ${upstreamVersion} WASIX ZTS libphp build";
@@ -119,6 +106,7 @@ in
       ./patches/common/0001-wasix-core-support.patch
       ./patches/common/0002-opcache-static-embed.patch
       ./patches/common/0003-cli-server-instaboot.patch
+      ./patches/common/0004-openssl-no-sock.patch
     ];
   };
 
@@ -130,6 +118,9 @@ in
     patches = [
       ./patches/php85/0001-wasix-core-support.patch
       ./patches/php85/0002-opcache-static-embed.patch
+      ./patches/php85/0003-pgsql-env-overrides.patch
+      ./patches/php85/0005-restore-php-smart-string-compat.patch
+      ./patches/common/0004-openssl-no-sock.patch
     ];
   };
 }
