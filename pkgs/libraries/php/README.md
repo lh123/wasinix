@@ -82,9 +82,9 @@ The original fork had working opcache support, and the current Nix build depends
 The critical points are:
 - PHP 8.3 still needs the extracted opcache patch stack from `patches/common/` and still passes `--enable-opcache`.
 - PHP 8.5 is different upstream and does not use the same `--enable-opcache` flag behavior.
-- The PHP build itself currently uses `WASIXCC_WASM_EXCEPTIONS=legacy` in `mk-php-zts.nix`.
+- The PHP build itself currently uses `WASIXCC_WASM_EXCEPTIONS=yes` in `mk-php-zts.nix`.
 
-That last point matters. The known-good `phpix` workflow builds PHP through the fork scripts with legacy exceptions, while `WASM_EXCEPTIONS=yes` is used there for sysroot lookup and later Rust-side `phpix` work, not for the PHP `./configure` build itself.
+With `wasixcc 0.4.x`, `WASM_EXCEPTIONS=yes` selects the exnref EH sysroots (`sysroot-exnref-eh*`), while `legacy` selects the older EH sysroots (`sysroot-eh*`). Keep PHP and `phpix` on the same mode or you will end up mixing incompatible sysroot/runtime assumptions.
 
 If opcache regresses, check build configuration before assuming the patch stack is incomplete.
 

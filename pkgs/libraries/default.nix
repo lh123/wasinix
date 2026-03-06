@@ -1,11 +1,21 @@
-{ nixpkgs, pkgs, pkgsCross, toolchain }:
+{
+  nixpkgs,
+  pkgs,
+  pkgsCross,
+  toolchain,
+  includePhp ? true,
+}:
 let
-  phpLibraries = import ./php {
-    inherit pkgs toolchain;
-  };
+  phpLibraries =
+    if includePhp then
+      import ./php {
+        inherit pkgs toolchain;
+      }
+    else
+      { };
 in
 {
-  ncursesLib = pkgsCross.callPackage ./ncurses {
+  ncurses = pkgsCross.callPackage ./ncurses {
     inherit nixpkgs toolchain;
   };
 } // phpLibraries

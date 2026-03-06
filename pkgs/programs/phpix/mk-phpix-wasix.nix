@@ -39,8 +39,6 @@ stdenvNoCC.mkDerivation {
   buildPhase = ''
     runHook preBuild
 
-    substituteInPlace build.rs --replace-fail "WASM_EXCEPTIONS=legacy" "WASM_EXCEPTIONS=yes"
-
     export HOME="$PWD/.home"
     export CARGO_HOME="$HOME/.cargo"
     export RUSTUP_HOME="$HOME/.rustup"

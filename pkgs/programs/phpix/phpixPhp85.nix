@@ -5,7 +5,7 @@
   cargoWasix,
   gcc,
   llvmPackages,
-  php83ZTS,
+  php85ZTS,
   toolchain,
 }:
 let
@@ -22,10 +22,10 @@ let
   };
 in
 mkPhpixWasix {
-  pname = "phpix-php83";
+  pname = "phpix-php85";
   version = "0.1.12803";
   src = ../../../vendor/phpix;
   cargoLock = ./phpix.Cargo.lock;
-  phpPackage = php83ZTS;
-  meta.description = "PHPix server for WASIX built against PHP 8.3 static libphp";
+  phpPackage = php85ZTS;
+  meta.description = "PHPix server for WASIX built against PHP 8.5 static libphp";
 }

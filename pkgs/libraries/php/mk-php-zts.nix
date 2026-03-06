@@ -114,7 +114,7 @@ stdenvNoCC.mkDerivation {
         CXXFLAGS = "-g -flto -O2";
         LIBS = "-L${phpWasixDeps}/lib-eh --no-wasm-opt";
         WASIXCC_INCLUDE_CPP_SYMBOLS = "yes";
-        WASIXCC_WASM_EXCEPTIONS = "legacy";
+        WASIXCC_WASM_EXCEPTIONS = "yes";
         PROG_SENDMAIL = "/usr/bin/sendmail";
       };
       exportConfigureEnv = lib.concatStringsSep "\n" (lib.mapAttrsToList (name: value:

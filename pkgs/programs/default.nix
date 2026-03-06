@@ -2,7 +2,7 @@
 rec {
   nano = pkgsCross.callPackage ./nano/nano.nix {
     inherit nixpkgs toolchain;
-    ncurses = libraries.ncursesLib;
+    ncurses = libraries.ncurses;
   };
   grep = pkgsCross.callPackage ./grep/grep.nix {
     inherit toolchain;
@@ -21,7 +21,7 @@ rec {
   };
   less = pkgsCross.callPackage ./less/less.nix {
     inherit toolchain;
-    ncurses = libraries.ncursesLib;
+    ncurses = libraries.ncurses;
   };
   ncurses = pkgsCross.callPackage ./ncurses/ncurses.nix {
     inherit nixpkgs toolchain;
@@ -35,5 +35,10 @@ rec {
     cargoWasix = toolchain.cargoWasix;
     inherit toolchain;
     php83ZTS = libraries.php83ZTS;
+  };
+  phpixPhp85 = pkgs.callPackage ./phpix/phpixPhp85.nix {
+    cargoWasix = toolchain.cargoWasix;
+    inherit toolchain;
+    php85ZTS = libraries.php85ZTS;
   };
 }

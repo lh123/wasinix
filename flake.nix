@@ -15,11 +15,7 @@
 
     in {
       wasix = {
-        inherit (wasix.toolchain) wasixcc;
-        cargo-wasix = wasix.toolchain.cargoWasix;
-        wasix-rust-toolchain = wasix.toolchain.wasixRustToolchain;
-        inherit (wasix.libraries) ncursesLib php83ZTS php85ZTS;
-        inherit (wasix.programs) nano grep sed find gzip tar less ncurses crabsay phpixPhp83;
+        inherit (wasix) toolchains libraries programs defaultProfileName;
       };
 
       wasmer = wasix.wasmer.packages;
@@ -31,15 +27,15 @@
 
       devShells.${system}.default = wasix.pkgs.mkShell {
         packages = [
-          wasix.toolchain.wasixcc
-          wasix.toolchain.cargoWasix
-          wasix.libraries.ncursesLib
+          wasix.toolchains.${wasix.defaultProfileName}.wasixcc
+          wasix.toolchains.${wasix.defaultProfileName}.cargoWasix
+          wasix.libraries.${wasix.defaultProfileName}.ncurses
           wasix.pkgs.gnumake
           wasix.pkgs.pkg-config
         ];
         shellHook = ''
-          ${wasix.toolchain.toolchainEnv}
-          ${wasix.toolchain.ccEnv}
+          ${wasix.toolchains.${wasix.defaultProfileName}.toolchainEnv}
+          ${wasix.toolchains.${wasix.defaultProfileName}.ccEnv}
           echo "WASIX shell ready. Build with: nix build"
         '';
       };
@@ -50,11 +46,12 @@
           wasmerAll = wasix.wasmer.allWasmer;
           default = wasix.allWasm;
 
-          cargo-wasix = wasix.toolchain.cargoWasix;
-          wasixcc = wasix.toolchain.wasixcc;
-          php83ZTS = wasix.libraries.php83ZTS;
-          php85ZTS = wasix.libraries.php85ZTS;
+          cargo-wasix = wasix.toolchains.${wasix.defaultProfileName}.cargoWasix;
+          wasixcc = wasix.toolchains.${wasix.defaultProfileName}.wasixcc;
+          php83ZTS = wasix.libraries.${wasix.defaultProfileName}.php83ZTS;
+          php85ZTS = wasix.libraries.${wasix.defaultProfileName}.php85ZTS;
           phpixPhp83 = wasix.programs.phpixPhp83;
+          phpixPhp85 = wasix.programs.phpixPhp85;
         };
     };
 }

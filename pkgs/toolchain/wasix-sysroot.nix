@@ -18,6 +18,14 @@ stdenvNoCC.mkDerivation {
     url = "https://github.com/wasix-org/wasix-libc/releases/download/${version}/sysroot-ehpic.tar.gz";
     hash = "sha256-6exFF8vtpUdK+tN0QFw0oZTNbRUMImZzd92g+8YfPgg=";
   };
+  srcSysrootExnrefEh = fetchurl {
+    url = "https://github.com/wasix-org/wasix-libc/releases/download/${version}/sysroot-exnref-eh.tar.gz";
+    hash = "sha256-tCPqKlJI+h6XOmBW8dFRN5GI/JvbIQ33MUZa/3/buVM=";
+  };
+  srcSysrootExnrefEhpic = fetchurl {
+    url = "https://github.com/wasix-org/wasix-libc/releases/download/${version}/sysroot-exnref-ehpic.tar.gz";
+    hash = "sha256-Yd9Pp1Xiz3wPAwsCQv2LMJJX91Rdze2yjiQ5TIxDqVY=";
+  };
 
   dontUnpack = true;
   nativeBuildInputs = [ gnutar ];
@@ -41,6 +49,8 @@ stdenvNoCC.mkDerivation {
     }
 
     unpack_sysroot "$srcSysroot" "sysroot"
+    unpack_sysroot "$srcSysrootExnrefEh" "sysroot-exnref-eh"
+    unpack_sysroot "$srcSysrootExnrefEhpic" "sysroot-exnref-ehpic"
     unpack_sysroot "$srcSysrootEh" "sysroot-eh"
     unpack_sysroot "$srcSysrootEhpic" "sysroot-ehpic"
     runHook postInstall

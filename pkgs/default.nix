@@ -1,58 +1,54 @@
 { system, nixpkgs }:
 let
   pkgs = import nixpkgs { inherit system; };
+  inherit (pkgs) lib;
   toolchainPkgs = import ./toolchain { inherit pkgs; };
-
-  toolchainEnv = rec {
-    buildCc = "${pkgs.buildPackages.stdenv.cc}/bin/cc";
-    host = "wasm32-wasix";
-    crossSystem = {
-      # Keep nixpkgs parser-compatible triple and pin WASIX tooling explicitly.
-      config = "wasm32-unknown-wasi";
-      useLLVM = true;
-      isWasix = true;
-    };
-
-    toolchainEnv = ''
-      export WASIXCC_LLVM_LOCATION="${toolchainPkgs.wasixLlvm}/bin"
-      export WASIXCC_SYSROOT_PREFIX="${toolchainPkgs.wasixSysroot}"
-      export WASIXCC_BINARYEN_LOCATION="${toolchainPkgs.binaryen}/bin"
-      export WASIXCC_AUTOCONF_WORKAROUNDS=yes
-    '';
-
-    ccEnv = ''
-      export CC=wasixcc
-      export CXX=wasix++
-      export LD=wasixld
-      export AR=wasixar
-      export NM=wasixnm
-      export RANLIB=wasixranlib
-      export WASIXCC_RUN_WASM_OPT=no
-    '';
-
-    commonPreConfigure = ''
-      export PATH="${toolchainPkgs.wasixcc}/bin:$PATH"
-      ${toolchainEnv}
-      ${ccEnv}
-    '';
+  mkToolchainProfile = pkgs.callPackage ./toolchain/mk-profile.nix {
+    inherit toolchainPkgs;
   };
-  toolchain = toolchainPkgs // toolchainEnv;
+
+  toolchains = {
+    eh = mkToolchainProfile {
+      name = "eh";
+      wasmExceptions = "legacy";
+    };
+    ehpic = mkToolchainProfile {
+      name = "ehpic";
+      wasmExceptions = "legacy";
+      pic = true;
+    };
+    exnrefEh = mkToolchainProfile {
+      name = "exnrefEh";
+      wasmExceptions = "yes";
+    };
+    exnrefEhpic = mkToolchainProfile {
+      name = "exnrefEhpic";
+      wasmExceptions = "yes";
+      pic = true;
+    };
+  };
+  defaultProfileName = "exnrefEh";
+  defaultToolchain = toolchains.${defaultProfileName};
 
   pkgsCross = import nixpkgs {
     inherit system;
-    crossSystem = toolchainEnv.crossSystem;
+    crossSystem = defaultToolchain.crossSystem;
   };
 
-  libraries = import ./libraries {
-    nixpkgs = nixpkgs;
-    inherit pkgs pkgsCross;
-    inherit toolchain;
-  };
+  libraries = lib.mapAttrs (profileName: toolchain:
+    import ./libraries {
+      inherit nixpkgs pkgs pkgsCross toolchain;
+      includePhp = profileName == defaultProfileName;
+    }
+  ) toolchains;
+
+  defaultLibraries = libraries.${defaultProfileName};
 
   programs = import ./programs {
     nixpkgs = nixpkgs;
-    inherit pkgs pkgsCross libraries;
-    inherit toolchain;
+    inherit pkgs pkgsCross;
+    libraries = defaultLibraries;
+    toolchain = defaultToolchain;
   };
 
   makeWasmerPackage = pkgs.callPackage ./wasmer/make-wasmer-package.nix { };
@@ -98,6 +94,10 @@ let
     inherit makeWasmerPackage;
     phpixPhp83 = programs.phpixPhp83;
   };
+  phpixPhp85Wasmer = pkgs.callPackage ./programs/phpix/phpixPhp85Wasmer.nix {
+    inherit makeWasmerPackage;
+    phpixPhp85 = programs.phpixPhp85;
+  };
 
   cliPlatformWasmer = pkgs.callPackage ./wasmer/cli-platform.nix {
     inherit makePlainWasmerPackage;
@@ -105,11 +105,11 @@ let
 
   wasmer = import ./wasmer {
     inherit (pkgs) lib;
-    inherit pkgs nanoWasmer grepWasmer sedWasmer findWasmer gzipWasmer tarWasmer lessWasmer ncursesWasmer crabsayWasmer phpixPhp83Wasmer cliPlatformWasmer;
+    inherit pkgs nanoWasmer grepWasmer sedWasmer findWasmer gzipWasmer tarWasmer lessWasmer ncursesWasmer crabsayWasmer phpixPhp83Wasmer phpixPhp85Wasmer cliPlatformWasmer;
   };
 
-  allPackages = libraries // programs;
-  allWasmPackages = pkgs.lib.removeAttrs allPackages [ "phpixPhp83" ];
+  allPackages = defaultLibraries // programs;
+  allWasmPackages = pkgs.lib.removeAttrs allPackages [ "phpixPhp83" "phpixPhp85" ];
 
   allWasm = pkgs.runCommand "wasix-all-wasm" { } ''
     mkdir -p "$out/bin"
@@ -122,6 +122,5 @@ let
   '';
 in
 {
-  inherit pkgs pkgsCross toolchain libraries programs wasmer allPackages allWasm;
-  libs = libraries;
+  inherit pkgs pkgsCross toolchains libraries programs wasmer allPackages allWasm defaultProfileName;
 }
