@@ -271,6 +271,11 @@ def main() -> int:
         action="store_true",
         help="Only print what would be published/skipped; do not publish anything.",
     )
+    parser.add_argument(
+        "--skip-sha-validation",
+        action="store_true",
+        help="Skip SHA-256 validation for package versions that already exist in the registry.",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -289,12 +294,21 @@ def main() -> int:
     )
     if args.dry_run:
         print("Dry-run mode enabled: no packages will be published.")
+    if args.skip_sha_validation:
+        print("SHA validation disabled for already-published package versions.")
 
     published = 0
     skipped = 0
     for pkg in ordered:
         published_info = get_published_package_version(graphql_url, pkg.full_name, pkg.version)
         if published_info.exists:
+            if args.skip_sha_validation:
+                print(
+                    f"SKIP {pkg.full_name}@{pkg.version} path={pkg.path} "
+                    "already exists (hash validation skipped)"
+                )
+                skipped += 1
+                continue
             if published_info.webc_sha256 is None:
                 raise SystemExit(
                     f"Cannot verify published hash for existing {pkg.full_name}@{pkg.version}; "
