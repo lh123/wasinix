@@ -2,7 +2,7 @@
 makePlainWasmerPackage {
   name = "cli-platform";
   packageName = "cli";
-  version = "0.1.2";
+  version = "0.1.3";
   description = "CLI platform - a wrapper package with many common tools, useful for interactive environments.";
   entrypoint = "bash";
   dependencies = {
