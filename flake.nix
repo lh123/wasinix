@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    self.submodules = true;
+    # self.submodules = true;
   };
 
   outputs = { nixpkgs, ... }:
@@ -50,8 +50,8 @@
           wasixcc = wasix.toolchains.${wasix.defaultProfileName}.wasixcc;
           php83ZTS = wasix.libraries.${wasix.defaultProfileName}.php83ZTS;
           php85ZTS = wasix.libraries.${wasix.defaultProfileName}.php85ZTS;
-          phpixPhp83 = wasix.programs.phpixPhp83;
-          phpixPhp85 = wasix.programs.phpixPhp85;
+          # phpixPhp83 = wasix.programs.phpixPhp83;
+          # phpixPhp85 = wasix.programs.phpixPhp85;
         };
     };
 }

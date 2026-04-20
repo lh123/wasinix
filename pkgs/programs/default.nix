@@ -31,14 +31,14 @@ rec {
     cargoWasix = toolchain.cargoWasix;
   };
 
-  phpixPhp83 = pkgs.callPackage ./phpix/phpixPhp83.nix {
-    cargoWasix = toolchain.cargoWasix;
-    inherit toolchain;
-    php83ZTS = libraries.php83ZTS;
-  };
-  phpixPhp85 = pkgs.callPackage ./phpix/phpixPhp85.nix {
-    cargoWasix = toolchain.cargoWasix;
-    inherit toolchain;
-    php85ZTS = libraries.php85ZTS;
-  };
+  # phpixPhp83 = pkgs.callPackage ./phpix/phpixPhp83.nix {
+  #   cargoWasix = toolchain.cargoWasix;
+  #   inherit toolchain;
+  #   php83ZTS = libraries.php83ZTS;
+  # };
+  # phpixPhp85 = pkgs.callPackage ./phpix/phpixPhp85.nix {
+  #   cargoWasix = toolchain.cargoWasix;
+  #   inherit toolchain;
+  #   php85ZTS = libraries.php85ZTS;
+  # };
 }

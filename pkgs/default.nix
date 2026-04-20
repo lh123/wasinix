@@ -91,14 +91,14 @@ let
     inherit makeWasmerPackage;
     crabsay = programs.crabsay;
   };
-  phpixPhp83Wasmer = pkgs.callPackage ./programs/phpix/phpixPhp83Wasmer.nix {
-    inherit makeWasmerPackage;
-    phpixPhp83 = programs.phpixPhp83;
-  };
-  phpixPhp85Wasmer = pkgs.callPackage ./programs/phpix/phpixPhp85Wasmer.nix {
-    inherit makeWasmerPackage;
-    phpixPhp85 = programs.phpixPhp85;
-  };
+  # phpixPhp83Wasmer = pkgs.callPackage ./programs/phpix/phpixPhp83Wasmer.nix {
+  #   inherit makeWasmerPackage;
+  #   phpixPhp83 = programs.phpixPhp83;
+  # };
+  # phpixPhp85Wasmer = pkgs.callPackage ./programs/phpix/phpixPhp85Wasmer.nix {
+  #   inherit makeWasmerPackage;
+  #   phpixPhp85 = programs.phpixPhp85;
+  # };
 
   cliPlatformWasmer = pkgs.callPackage ./wasmer/cli-platform.nix {
     inherit makePlainWasmerPackage;
@@ -106,11 +106,11 @@ let
 
   wasmer = import ./wasmer {
     inherit (pkgs) lib;
-    inherit pkgs nanoWasmer grepWasmer sedWasmer findWasmer gzipWasmer tarWasmer lessWasmer ncursesWasmer crabsayWasmer phpixPhp83Wasmer phpixPhp85Wasmer cliPlatformWasmer;
+    inherit pkgs nanoWasmer grepWasmer sedWasmer findWasmer gzipWasmer tarWasmer lessWasmer ncursesWasmer crabsayWasmer cliPlatformWasmer;
   };
 
   allPackages = defaultLibraries // programs;
-  allWasmPackages = pkgs.lib.removeAttrs allPackages [ "phpixPhp83" "phpixPhp85" ];
+  allWasmPackages = allPackages;
 
   allWasm = pkgs.runCommand "wasix-all-wasm" { } ''
     mkdir -p "$out/bin"

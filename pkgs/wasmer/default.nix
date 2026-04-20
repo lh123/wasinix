@@ -1,4 +1,4 @@
-{ lib, pkgs, nanoWasmer, grepWasmer, sedWasmer, findWasmer, gzipWasmer, tarWasmer, lessWasmer, ncursesWasmer, crabsayWasmer, phpixPhp83Wasmer, phpixPhp85Wasmer, cliPlatformWasmer }:
+{ lib, pkgs, nanoWasmer, grepWasmer, sedWasmer, findWasmer, gzipWasmer, tarWasmer, lessWasmer, ncursesWasmer, crabsayWasmer, cliPlatformWasmer }:
 let
   packages = {
     nano = nanoWasmer;
@@ -10,13 +10,13 @@ let
     less = lessWasmer;
     ncurses = ncursesWasmer;
     crabsay = crabsayWasmer;
-    phpixPhp83 = phpixPhp83Wasmer;
-    phpnixPhp83 = phpixPhp83Wasmer;
-    phpixPhp85 = phpixPhp85Wasmer;
-    phpnixPhp85 = phpixPhp85Wasmer;
+    # phpixPhp83 = phpixPhp83Wasmer;
+    # phpnixPhp83 = phpixPhp83Wasmer;
+    # phpixPhp85 = phpixPhp85Wasmer;
+    # phpnixPhp85 = phpixPhp85Wasmer;
     cliPlatform = cliPlatformWasmer;
   };
-  allWasmerPackages = lib.removeAttrs packages [ "phpixPhp83" "phpnixPhp83" "phpixPhp85" "phpnixPhp85" ];
+  allWasmerPackages = packages;
 
   allWasmer = pkgs.runCommand "wasix-all-wasmer" { } ''
     set -euo pipefail
