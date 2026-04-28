@@ -26,8 +26,25 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v19
 
-      - name: Build all
+      - name: Build and Push to R2
         shell: bash
         run: |
           set -euo pipefail
-          nix build --print-build-logs --show-trace .#all
+          
+          # Build all packages in the flake
+          nix build --print-build-logs --show-trace .#packages.x86_64-linux --json \
+            | jq -r '.[].outputs | to_entries[].value' > out_paths
+          
+          if [ -n "${{ secrets.NIX_SIGNING_KEY }}" ]; then
+            echo "Signing and pushing to cache..."
+            echo "${{ secrets.NIX_SIGNING_KEY }}" > ./secret-key
+            nix store sign --key-file ./secret-key $(cat out_paths)
+            
+            # Push to R2 with zstd compression
+            nix copy --to "s3://wasinix-cache?region=auto&endpoint=https://1541b1e8a3fc6ad155ce67ef38899700.r2.cloudflarestorage.com&compression=zstd" $(cat out_paths)
+          else
+            echo "NIX_SIGNING_KEY not set, skipping cache push."
+          fi
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}

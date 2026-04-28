@@ -1,5 +1,10 @@
 {
   description = "WASIX package repository";
+  
+  nixConfig = {
+    extra-substituters = [ "https://nix-cache.wasix.org" ];
+    extra-trusted-public-keys = [ "wasinix-1:jvsqbOJGsZxMvg97fuyNCWCc+t2nn6uHB47kQCGNmXI=" ];
+  };
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
