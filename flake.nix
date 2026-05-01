@@ -1,6 +1,6 @@
 {
   description = "WASIX package repository";
-  
+
   nixConfig = {
     extra-substituters = [ "https://nix-cache.wasix.org" ];
     extra-trusted-public-keys = [ "wasinix-1:jvsqbOJGsZxMvg97fuyNCWCc+t2nn6uHB47kQCGNmXI=" ];
@@ -24,6 +24,7 @@
       };
 
       wasmer = wasix.wasmer.packages;
+
       legacyPackages.${system} = {
         pkgsCross = {
           wasix = wasix.pkgsCross;
@@ -47,14 +48,17 @@
 
       packages.${system} =
         {
+          # Actual system packages.
+          cargo-wasix = wasix.toolchains.${wasix.defaultProfileName}.cargoWasix;
+          wasixcc = wasix.toolchains.${wasix.defaultProfileName}.wasixcc;
+
+          # wasix outputs
           wasixAll = wasix.allWasm;
           wasmerAll = wasix.wasmer.allWasmer;
           default = wasix.allWasm;
 
-          cargo-wasix = wasix.toolchains.${wasix.defaultProfileName}.cargoWasix;
-          wasixcc = wasix.toolchains.${wasix.defaultProfileName}.wasixcc;
-          php83ZTS = wasix.libraries.${wasix.defaultProfileName}.php83ZTS;
-          php85ZTS = wasix.libraries.${wasix.defaultProfileName}.php85ZTS;
+          # php83ZTS = wasix.libraries.${wasix.defaultProfileName}.php83ZTS;
+          # php85ZTS = wasix.libraries.${wasix.defaultProfileName}.php85ZTS;
           # phpixPhp83 = wasix.programs.phpixPhp83;
           # phpixPhp85 = wasix.programs.phpixPhp85;
         };

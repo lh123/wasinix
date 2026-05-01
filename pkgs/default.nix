@@ -39,7 +39,8 @@ let
   libraries = lib.mapAttrs (profileName: toolchain:
     import ./libraries {
       inherit nixpkgs pkgs pkgsCross toolchain;
-      includePhp = profileName == defaultProfileName;
+      # includePhp = profileName == defaultProfileName;
+      includePhp = false;
     }
   ) toolchains;
 
@@ -91,6 +92,7 @@ let
     inherit makeWasmerPackage;
     crabsay = programs.crabsay;
   };
+
   # phpixPhp83Wasmer = pkgs.callPackage ./programs/phpix/phpixPhp83Wasmer.nix {
   #   inherit makeWasmerPackage;
   #   phpixPhp83 = programs.phpixPhp83;
