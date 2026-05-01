@@ -27,8 +27,9 @@ jobs:
         uses: cachix/install-nix-action@v31.9.1
         with:
           extra_nix_config: |
-            substituters = https://cache.nixos.org https://nix-cache.wasix.org
-            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= wasinix-1:jvsqbOJGsZxMvg97fuyNCWCc+t2nn6uHB47kQCGNmXI=
+            extra-substituters = https://nix-cache.wasix.org
+            extra-trusted-public-keys = wasinix-1:jvsqbOJGsZxMvg97fuyNCWCc+t2nn6uHB47kQCGNmXI=
+            trusted-users = root runner
 
       - name: Build and Push to R2
         shell: bash
