@@ -108,6 +108,13 @@
       postInstall = ''
         mkdir -p "$man/share/man"
       '';
+      # wasm32 has no SIMD, but WITH_SIMD defaults on and libjpeg-turbo's
+      # simd_fail macro mis-scopes its WITH_SIMD=0, so the simdcoverage helper
+      # still gets built and fails to compile (undeclared jsimd_can_*). Turn
+      # SIMD off explicitly; the C fallback is what wasm uses anyway.
+      overrideAttrs = old: {
+        cmakeFlags = (old.cmakeFlags or []) ++ ["-DWITH_SIMD=OFF"];
+      };
     };
 
     libdeflate = mkUpstreamLibrary {
@@ -156,6 +163,10 @@
         libpng = self.libpng;
       };
       doCheck = false;
+      # We don't build harfbuzz for wasm; freetype's configure otherwise
+      # auto-detects it and aborts with "harfbuzz support requested but library
+      # not found". (freetype→harfbuzz is the looser side of the cycle anyway.)
+      configureFlags = ["--with-harfbuzz=no"];
       overrideAttrs = old: {
         nativeBuildInputs =
           [toolchain.wasixcc]
@@ -178,6 +189,11 @@
         zlib = self.zlib;
         withLZMA = true;
         xz = self.xz;
+        # Use our zstd, not the raw pkgsCross one — the latter cross-compiles a
+        # wasm gnugrep (and so pcre2) for its build, which can't link for WASI.
+        zstd = self.zstd;
+        # No wasix bzip2 (its signal handling doesn't compile for WASI).
+        withBzip2 = false;
       };
       doCheck = false;
     };

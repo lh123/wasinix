@@ -43,16 +43,18 @@
     config.allowUnsupportedSystem = true;
   };
 
-  libraries =
-    lib.mapAttrs (
-      profileName: toolchain:
-        import ./libraries {
-          inherit nixpkgs pkgs pkgsCross toolchain;
-          # includePhp = profileName == defaultProfileName;
-          includePhp = false;
-        }
-    )
-    toolchains;
+  mkLibraries = toolchain:
+    import ./libraries {
+      inherit nixpkgs pkgs pkgsCross toolchain;
+      includePhp = false;
+    };
+
+  # The off (no wasm-EH) profile is not a general library profile: it has no PIC
+  # sysroot, so libraries that pull -fPIC in through their own configure/CMake
+  # can't link there. It exists only for bash, which links readline+ncurses, so
+  # it's kept out of the per-profile library matrix and drawn from on demand.
+  libraries = lib.mapAttrs (_: mkLibraries) (removeAttrs toolchains ["off"]);
+  offLibraries = mkLibraries toolchains.off;
 
   defaultLibraries = libraries.${defaultProfileName};
 
@@ -62,7 +64,7 @@
     toolchain = defaultToolchain;
     # bash + its linked readline/ncurses build off-EH (see ./programs/bash/README.md).
     offToolchain = toolchains.off;
-    offLibraries = libraries.off;
+    inherit offLibraries;
     libraries = defaultLibraries;
   };
 

@@ -33,6 +33,7 @@ pkgsCross.openssl.overrideAttrs (old: {
       no-pic \
       no-dso \
       no-afalgeng \
+      -DOPENSSL_NO_SECURE_MEMORY \
       --prefix=$out \
       --openssldir=$out/etc/ssl \
       --libdir=lib
