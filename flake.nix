@@ -31,6 +31,10 @@
       inherit system nixpkgs;
     };
 
+    # WIP: redesigned toolchain foundations (from-source LLVM + libc), built up
+    # in parallel with the existing toolchain. Not wired into anything yet.
+    wasixNext = import ./pkgs/wasix-next {pkgs = wasix.pkgs;};
+
     treefmtEval = treefmt-nix.lib.evalModule wasix.pkgs {
       projectRootFile = "flake.nix";
       programs.alejandra.enable = true;
@@ -53,6 +57,7 @@
       # independently. Dotted keys, e.g. "libraries.exnrefEh.ncurses".
       ci = let
         inherit (wasix.pkgs) lib;
+        defaultToolchain = wasix.toolchains.${wasix.defaultProfileName};
         derivationsOnly = lib.filterAttrs (_: lib.isDerivation);
         libraryJobs = lib.concatMapAttrs (
           profile:
@@ -60,8 +65,18 @@
         ) (lib.mapAttrs (_: derivationsOnly) wasix.libraries);
         programJobs = lib.mapAttrs' (name: drv: lib.nameValuePair "programs.${name}" drv) (derivationsOnly wasix.programs);
         wasmerJobs = lib.mapAttrs' (name: drv: lib.nameValuePair "wasmer.${name}" drv) (derivationsOnly wasix.wasmer.packages);
+        toolchainJobs = {
+          "toolchain.wasixcc" = defaultToolchain.wasixcc;
+          "toolchain.cargo-wasix" = defaultToolchain.cargoWasix;
+          # New from-source foundations (WIP):
+          "toolchain.llvm-next.clang" = wasixNext.llvm.clang;
+          "toolchain.llvm-next.lld" = wasixNext.llvm.lld;
+          "toolchain.libc-next" = wasixNext.libc;
+          # The wasmer runtime itself (from the wasmer input).
+          "wasmer-runtime" = wasmer.packages.${system}.wasmer;
+        };
       in
-        libraryJobs // programJobs // wasmerJobs;
+        libraryJobs // programJobs // wasmerJobs // toolchainJobs;
     };
 
     devShells.${system}.default = wasix.pkgs.mkShell {
@@ -98,6 +113,12 @@
       wasixAll = wasix.allWasm;
       wasmerAll = wasix.wasmer.allWasmer;
       default = wasix.allWasm;
+
+      # WIP redesign foundations (build in isolation):
+      #   nix build .#wasix-libc-next   (fast)
+      #   nix build .#wasix-llvm-next   (from-source LLVM — slow)
+      wasix-libc-next = wasixNext.libc;
+      wasix-llvm-next = wasixNext.llvm.clang;
 
       # php83ZTS = wasix.libraries.${wasix.defaultProfileName}.php83ZTS;
       # php85ZTS = wasix.libraries.${wasix.defaultProfileName}.php85ZTS;
