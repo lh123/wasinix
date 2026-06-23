@@ -12,17 +12,15 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # don't cancel main: let cache-warming runs finish (PRs still cancel)
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
     name: Build packages
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    # Forks and PRs without credentials still build and report; only the push
-    # step is skipped.
-    env:
-      HAVE_CACHE_SECRETS: ${{ secrets.NIX_SIGNING_KEY != '' && secrets.S3_ACCESS_KEY_ID != '' && secrets.S3_SECRET_ACCESS_KEY != '' }}
+    # high ceiling for a cold cache; warm runs finish in minutes (max is 360)
+    timeout-minutes: 350
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,14 +33,17 @@ jobs:
             extra-trusted-public-keys = wasinix-1:jvsqbOJGsZxMvg97fuyNCWCc+t2nn6uHB47kQCGNmXI=
             trusted-users = root runner
 
-      # Builds every package independently and writes a JUnit report (one test
-      # case per package). A broken package fails the check without blocking
-      # the rest, and this step needs no secrets, so it always runs (incl.
-      # forks).
+      # per-package build + JUnit report; uploads to cache as it builds when
+      # credentials are present (forks build keyless), so timeouts don't lose work
       - name: Build
         id: build
         shell: bash
         run: ./scripts/ci-build.sh
+        # empty on fork PRs → build runs without uploading
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          NIX_SIGNING_KEY: ${{ secrets.NIX_SIGNING_KEY }}
 
       # rendered by test-report.yml (workflow_run, so fork PRs get a check too)
       - name: Upload report
@@ -52,17 +53,3 @@ jobs:
           name: junit-report
           path: nix-fast-build-result.xml
           if-no-files-found: error
-
-      # Independent of the build: signs and pushes whatever built successfully
-      # and isn't in the cache yet. `always()` so good packages are still
-      # cached even when another package failed above; gated on credentials so
-      # secret-less PRs skip it gracefully. A push failure (e.g. cache down)
-      # does not retroactively fail the build report.
-      - name: Push to cache
-        if: ${{ always() && env.HAVE_CACHE_SECRETS == 'true' }}
-        shell: bash
-        run: ./scripts/ci-push.sh
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
-          NIX_SIGNING_KEY: ${{ secrets.NIX_SIGNING_KEY }}
