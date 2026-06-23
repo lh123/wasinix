@@ -33,6 +33,15 @@ jobs:
             extra-trusted-public-keys = wasinix-1:jvsqbOJGsZxMvg97fuyNCWCc+t2nn6uHB47kQCGNmXI=
             trusted-users = root runner
 
+      # Wasmer's nested lib/napi submodule still points quickjs at GitHub SSH.
+      - name: Use HTTPS for GitHub git URLs
+        shell: bash
+        run: |
+          sudo git config --system --add url.https://github.com/.insteadOf git@github.com:
+          sudo git config --system --add url.https://github.com/.insteadOf ssh://git@github.com/
+          git config --global --add url.https://github.com/.insteadOf git@github.com:
+          git config --global --add url.https://github.com/.insteadOf ssh://git@github.com/
+
       # per-package build + JUnit report; uploads to cache as it builds when
       # credentials are present (forks build keyless), so timeouts don't lose work
       - name: Build
