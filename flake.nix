@@ -33,7 +33,10 @@
 
     # WIP: redesigned toolchain foundations (from-source LLVM + libc), built up
     # in parallel with the existing toolchain. Not wired into anything yet.
-    wasixNext = import ./pkgs/wasix-next {pkgs = wasix.pkgs;};
+    wasixNext = import ./pkgs/wasix-next {
+      pkgs = wasix.pkgs;
+      inherit nixpkgs system;
+    };
 
     treefmtEval = treefmt-nix.lib.evalModule wasix.pkgs {
       projectRootFile = "flake.nix";
@@ -72,6 +75,8 @@
           "toolchain.llvm-next.clang" = wasixNext.llvm.clang;
           "toolchain.llvm-next.lld" = wasixNext.llvm.lld;
           "toolchain.libc-next" = wasixNext.libc;
+          "toolchain.compiler-rt-next" = wasixNext.compiler-rt;
+          "toolchain.libcxx-next" = wasixNext.libcxx;
           # The wasmer runtime itself (from the wasmer input).
           "wasmer-runtime" = wasmer.packages.${system}.wasmer;
         };
@@ -119,6 +124,9 @@
       #   nix build .#wasix-llvm-next   (from-source LLVM — slow)
       wasix-libc-next = wasixNext.libc;
       wasix-llvm-next = wasixNext.llvm.clang;
+      # Runtimes via nixpkgs cross (deviations in the llvmPackages overlay):
+      wasix-compiler-rt-next = wasixNext.compiler-rt;
+      wasix-libcxx-next = wasixNext.libcxx;
 
       # php83ZTS = wasix.libraries.${wasix.defaultProfileName}.php83ZTS;
       # php85ZTS = wasix.libraries.${wasix.defaultProfileName}.php85ZTS;

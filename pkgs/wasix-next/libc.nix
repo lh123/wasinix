@@ -56,6 +56,10 @@ in
     pname = "wasix-libc";
     inherit version src;
 
+    # Match nixpkgs' wasilibc output contract so this is a drop-in cross libc
+    # (cc-wrapper takes libs from `out`/lib and headers from `dev`/include).
+    outputs = ["out" "dev"];
+
     nativeBuildInputs = [
       # raw (unwrapped) clang + llvm tools: wasix-libc drives the target itself.
       llvmPackages_21.clang-unwrapped
@@ -113,7 +117,15 @@ in
 
     installPhase = ''
       runHook preInstall
-      cp -r sysroot "$out"
+      mkdir -p "$out/lib" "$dev"
+      # nixpkgs' cc-wrapper finds crt/libs via -B<libc>/lib/ (FLAT), whereas
+      # wasix-libc's Makefile installs under lib/wasm32-wasi/. Flatten to match,
+      # and keep a wasm32-wasi -> . symlink for sysroot-style (-L .../lib/<triple>)
+      # consumers.
+      cp -r sysroot/lib/wasm32-wasi/. "$out/lib/"
+      ln -s . "$out/lib/wasm32-wasi"
+      cp -r sysroot/include "$dev/include"
+      [ -d sysroot/share ] && cp -r sysroot/share "$out/share" || true
       runHook postInstall
     '';
 
