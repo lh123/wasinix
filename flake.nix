@@ -91,6 +91,7 @@
         wasix.libraries.${wasix.defaultProfileName}.ncurses
         wasix.pkgs.gnumake
         wasix.pkgs.pkg-config
+        wasmer.packages.${system}.wasmer
       ];
       shellHook = ''
         ${wasix.toolchains.${wasix.defaultProfileName}.toolchainEnv}
