@@ -129,6 +129,8 @@
       wasix-compiler-rt-next = wasixNext.compiler-rt;
       wasix-libcxx-next = wasixNext.libcxx;
 
+      wasmer-bin = wasmer.packages.${system}.wasmer;
+
       # php83ZTS = wasix.libraries.${wasix.defaultProfileName}.php83ZTS;
       # php85ZTS = wasix.libraries.${wasix.defaultProfileName}.php85ZTS;
       # phpixPhp83 = wasix.programs.phpixPhp83;
