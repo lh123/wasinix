@@ -91,6 +91,7 @@
         wasix.libraries.${wasix.defaultProfileName}.ncurses
         wasix.pkgs.gnumake
         wasix.pkgs.pkg-config
+        wasmer.packages.${system}.wasmer
       ];
       shellHook = ''
         ${wasix.toolchains.${wasix.defaultProfileName}.toolchainEnv}
@@ -127,6 +128,8 @@
       # Runtimes via nixpkgs cross (deviations in the llvmPackages overlay):
       wasix-compiler-rt-next = wasixNext.compiler-rt;
       wasix-libcxx-next = wasixNext.libcxx;
+
+      wasmer-bin = wasmer.packages.${system}.wasmer;
 
       # php83ZTS = wasix.libraries.${wasix.defaultProfileName}.php83ZTS;
       # php85ZTS = wasix.libraries.${wasix.defaultProfileName}.php85ZTS;
