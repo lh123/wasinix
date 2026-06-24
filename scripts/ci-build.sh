@@ -32,9 +32,8 @@ else
 fi
 
 # --copy-to pushes only runtime closures, so build-only deps (pkg-config wrapper
-# + hooks, vendor dirs) never get cached -> next run sees those packages as
-# uncached and re-pulls everything. Capture them now (must be pre-build: once
-# built they read "local", not "notBuilt") and push after the build realises them.
+# + hooks) never cache, leaving those packages uncached next run. Capture them
+# pre-build (post-build they'd read "local", not "notBuilt"); pushed below.
 PUSH_DRVS=""
 if [ -n "${NIX_SIGNING_KEY:-}" ]; then
   PUSH_DRVS=$(
@@ -59,14 +58,13 @@ nix run nixpkgs#nix-fast-build -- \
   "${COPY_ARGS[@]}"
 status=$?
 
-# copy-to above already pushed the runtime closures during the build; this is
-# the build-only half it can't reach. Here we just push the captured deps' outputs.
-# copy --to skips already cached paths, so this is a no-op if cache is warm already.
+# Realise + push the captured build-only deps. Realise is required: nix-fast-build
+# substitutes cached outputs instead of building, so these are never realised on
+# the runner. --keep-going so a broken heavy dep can't block the cheap hooks;
+# nix copy skips cached paths, so it's a no-op once warm.
 if [ -n "${NIX_SIGNING_KEY:-}" ] && [ -n "$PUSH_DRVS" ]; then
-  outs=$(
-    printf '%s\n' "$PUSH_DRVS" | xargs -r nix-store --query --outputs 2>/dev/null |
-      while read -r p; do [ -n "$p" ] && [ -e "$p" ] && printf '%s\n' "$p"; done
-  )
+  # shellcheck disable=SC2086
+  outs=$(printf '%s\n' "$PUSH_DRVS" | xargs -r nix-store --realise --keep-going 2>/dev/null)
   if [ -n "$outs" ]; then
     echo "Pushing $(printf '%s\n' "$outs" | wc -l) build-time paths --copy-to misses..."
     # shellcheck disable=SC2086
