@@ -1,36 +1,47 @@
 {
   lib,
   stdenvNoCC,
+  rustPlatform,
   fetchFromGitHub,
   cargoWasix,
-}:
-stdenvNoCC.mkDerivation rec {
-  pname = "crabsay";
-  version = "0.1.0";
-
+}: let
   src = fetchFromGitHub {
-    owner = "nevzheng";
+    owner = "Zaechus";
     repo = "crabsay";
-    rev = "master";
-    hash = "sha256-5DVY/eoP/WhIYpIY8vvSQC4gFTI3N2kQb4Lkn0bbfZ8=";
+    rev = "2ed8af9b16dc1e8d04851b62314e878536112ca9";
+    hash = "sha256-ptHjotWwpEJ4xz12pSTHxPh7+6EuPKM6ZnXT6WurVq8=";
   };
+in
+  stdenvNoCC.mkDerivation {
+    pname = "crabsay";
+    version = "0.1.1";
 
-  nativeBuildInputs = [cargoWasix];
+    inherit src;
 
-  buildPhase = ''
-    runHook preBuild
-    export HOME="$PWD/.home"
-    export CARGO_HOME="$HOME/.cargo"
-    export RUSTUP_HOME="$HOME/.rustup"
-    mkdir -p "$HOME" "$CARGO_HOME" "$RUSTUP_HOME"
-    cargo-wasix wasix build --release
-    runHook postBuild
-  '';
+    cargoDeps = rustPlatform.importCargoLock {
+      lockFile = "${src}/Cargo.lock";
+    };
 
-  installPhase = ''
-    runHook preInstall
-    mkdir -p "$out/bin"
-    cp target/wasm32-wasmer-wasi/release/crabsay.wasm "$out/bin/crabsay.wasm"
-    runHook postInstall
-  '';
-}
+    nativeBuildInputs = [
+      cargoWasix
+      rustPlatform.cargoSetupHook
+    ];
+
+    buildPhase = ''
+      runHook preBuild
+      # cargoSetupHook owns CARGO_HOME (points cargo at the vendored deps); we just
+      # need a writable HOME/RUSTUP_HOME for cargo-wasix's own state.
+      export HOME="$PWD/.home"
+      export RUSTUP_HOME="$HOME/.rustup"
+      mkdir -p "$HOME" "$RUSTUP_HOME"
+      cargo-wasix wasix build --release --offline
+      runHook postBuild
+    '';
+
+    installPhase = ''
+      runHook preInstall
+      mkdir -p "$out/bin"
+      cp target/wasm32-wasmer-wasi/release/crabsay.wasm "$out/bin/crabsay.wasm"
+      runHook postInstall
+    '';
+  }
