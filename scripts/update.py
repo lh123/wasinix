@@ -90,16 +90,12 @@ def prefetch_url(url):
 def prefetch_github_submodules(owner, repo, rev):
     # `prefetch-file --unpack` hashes only the archive tarball, which omits
     # submodules; for fetchSubmodules=true (rust pulls src/llvm-project) we must
-    # fetch the real tree. Build the FOD with a wrong hash and read nix's "got:".
-    expr = (f'with import <nixpkgs> {{}}; fetchFromGitHub {{ '
-            f'owner = "{owner}"; repo = "{repo}"; rev = "{rev}"; '
-            f'fetchSubmodules = true; hash = lib.fakeHash; }}')
-    p = subprocess.run(["nix", "build", "--impure", "--no-link", "--expr", expr],
-                       text=True, capture_output=True)
-    m = re.search(r'got:\s+(sha256-[A-Za-z0-9+/=]+)', p.stderr)
-    if not m:
-        raise RuntimeError(f"no hash in nix output:\n{p.stderr[-800:]}")
-    return m.group(1)
+    # fetch the real tree. nix-prefetch-git --fetch-submodules computes exactly
+    # the hash fetchFromGitHub verifies, and (unlike `import <nixpkgs>`) needs no
+    # nixpkgs in the search path — which CI/flake eval doesn't provide.
+    out = run(["nix-prefetch-git", "--quiet", "--fetch-submodules",
+               "--url", f"https://github.com/{owner}/{repo}.git", "--rev", rev])
+    return json.loads(out.stdout)["hash"]
 
 
 def raw_file(owner, repo, rev, path):
