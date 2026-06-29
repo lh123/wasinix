@@ -42,11 +42,19 @@ jobs:
           if [ -n "${{ github.event.inputs.only }}" ]; then
             args=(--only ${{ github.event.inputs.only }})
           fi
-          nix run .#update -- "${args[@]}" 2>&1 | tee update.log
-          # surface the bump/regen lines in the PR body
+          # A failed target must not abort the PR for the ones that bumped: capture
+          # the exit code (the script already isolates targets) and re-raise it at
+          # the end of the job, after the partial PR is opened.
+          # Log outside the checkout so create-pull-request doesn't commit it.
+          log="$RUNNER_TEMP/update.log"
+          set +e
+          nix run .#update -- "${args[@]}" 2>&1 | tee "$log"
+          code=${PIPESTATUS[0]}
+          set -e
           {
+            echo "exit_code=$code"
             echo 'summary<<EOF'
-            grep -E '^( {2}.* -> |  regen:|==>)' update.log || true
+            grep -E '^(  .* -> |  regen:|  FAILED|==>|FAILED)' "$log" || true
             echo EOF
           } >>"$GITHUB_OUTPUT"
 
@@ -63,10 +71,18 @@ jobs:
           body: |
             Automated weekly bump of the repo's own source pins, with derived
             files (cargo-wasix Cargo.lock, rust stage0 bootstrap) regenerated.
-
-            Let CI validate the builds before merging.
+            If the job is red, one or more targets failed (see FAILED below) — the
+            rest still bumped. Let CI validate the builds before merging.
 
             ```
             ${{ steps.run.outputs.summary }}
             ```
           delete-branch: true
+
+      # Re-raise any target failure so the run is red, after the partial PR opens.
+      - name: Surface updater failures
+        if: steps.run.outputs.exit_code != '0'
+        shell: bash
+        run: |
+          echo "::error::updater reported failed target(s) — see the PR body / log"
+          exit 1
