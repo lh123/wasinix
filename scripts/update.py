@@ -155,7 +155,7 @@ def regen_cargo_wasix_lock(t):
     if dst.read_text() == new:
         return None
     dst.write_text(new)
-    return f"regenerated cargo-wasix.Cargo.lock at {rev[:12]}"
+    return f"regenerated cargo-wasix.Cargo.lock at v{version}"
 
 
 def regen_rust_bootstrap(t):
@@ -186,6 +186,37 @@ def regen_rust_bootstrap(t):
     text = text.replace(old_hash, new_hash, 1)
     path.write_text(text)
     return f"synced rust bootstrap -> {ver} ({date})"
+
+
+def regen_libc_witx(t):
+    # wasix-libc carries the wasi/wasix witx specs as git submodules; libc.nix
+    # pins them separately (the header generators run from those, decoupled from
+    # the libc src). A wasix-libc bump usually moves the wasix-witx submodule
+    # (new syscalls), and a stale pin fails the libc build with undeclared
+    # __wasi_* functions — so sync each pin to the submodule rev at the new tag.
+    tag = re.search(r'wasixLibcVersion = "([^"]+)"',
+                    (REPO / "pkgs/toolchain/sysroot.nix").read_text()).group(1)
+    path = REPO / "pkgs/toolchain/libc.nix"
+    text = path.read_text()
+    bumped = []
+    for sub, owner, repo in [
+        ("tools/wasi-headers/WASI", "WebAssembly", "WASI"),
+        ("tools/wasix-headers/WASI", "wasix-org", "wasix-witx"),
+    ]:
+        sha = gh(f"wasix-org/wasix-libc/contents/{sub}?ref={tag}")["sha"]
+        m = re.search(
+            rf'repo = "{repo}";\s*\n\s*rev = "([^"]+)";\s*\n\s*hash = "([^"]+)"', text)
+        if not m:
+            raise RuntimeError(f"{repo}: witx pin block not found in libc.nix")
+        if m.group(1) == sha:
+            continue
+        new_hash = prefetch_github(owner, repo, sha)
+        text = text.replace(m.group(1), sha, 1).replace(m.group(2), new_hash, 1)
+        bumped.append(f"{repo} -> {sha[:12]}")
+    if not bumped:
+        return None
+    path.write_text(text)
+    return "witx pins: " + ", ".join(bumped)
 
 
 TARGETS = [
@@ -222,7 +253,8 @@ TARGETS = [
     Target("wasix-libc", "prefetch",
            file="pkgs/toolchain/sysroot.nix",
            owner="wasix-org", repo="wasix-libc",
-           version_re=r'wasixLibcVersion = "([^"]+)"'),
+           version_re=r'wasixLibcVersion = "([^"]+)"',
+           regen=regen_libc_witx),
     # llvm: bump the fork release tag + hash only. llvmVersion is the *base* LLVM
     # version that drives nixpkgs' patch selection and must not be touched.
     Target("llvm", "prefetch",
