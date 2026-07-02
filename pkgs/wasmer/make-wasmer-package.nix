@@ -7,7 +7,7 @@
 #   version     ? toSemver package.version          (3.12 -> 3.12.0)
 #   description ? meta.description
 #   license     ? meta.license (spdxId/shortName)
-#   owner       ? "wasmer"
+#   owner       ? "wasinix"
 #   commands    ? null  => one command per bin/*.wasm (auto-globbed at build)
 #   commandEnv  ? {}     => { <command> = { ENV = "val"; }; } merged onto a command
 #   fs          ? {}     => semantic mounts, e.g. { "/etc/ssl" = "${cacert}/etc/ssl"; }
@@ -18,6 +18,10 @@
 {
   lib,
   pkgs,
+  # the wasmer runtime, to build each package's .webc for a dep tree.
+  wasmer,
+  # makeWasmerPackage itself, to build the webc of packages this one depends on.
+  self,
 }: {package}: let
   w = package.passthru.wasmer or {};
 
@@ -31,9 +35,21 @@
   in
     lib.concatStringsSep "." padded;
 
-  name = w.name or package.meta.mainProgram or package.pname or package.name;
-  owner = w.owner or "wasmer";
-  version = w.version or (toSemver (package.version or "0.0.0"));
+  # Single source of truth for how a wasix package maps to its published webc
+  # identity (owner / name / semver). Used both for THIS package and for any it
+  # depends on, so a `[dependencies]` reference can't drift from how the
+  # dependency itself publishes. Deviations live in the package's passthru.wasmer.
+  webcIdent = p: let
+    pw = p.passthru.wasmer or {};
+    name = pw.name or p.meta.mainProgram or p.pname or p.name;
+    owner = pw.owner or "wasinix";
+    version = pw.version or (toSemver (p.version or "0.0.0"));
+  in {
+    inherit owner name version;
+    fullName = "${owner}/${name}";
+  };
+
+  inherit (webcIdent package) name owner version;
   description =
     w.description
     or (
@@ -57,6 +73,34 @@
   fs = w.fs or {};
   selfMounts = w.selfMounts or [];
   autoSelfMount = w.autoSelfMount or false;
+
+  # Other wasix packages this one execs at runtime: each becomes a webc
+  # `[dependencies]` entry. At load wasmer's use_package writes the dependency's
+  # command atoms into this package's fs at /bin/<cmd> (and /usr/bin/<cmd>), so
+  # a program that execs e.g. /bin/bash resolves it from the dependency instead
+  # of bundling its own copy — shared programs ship once.
+  dependencies = w.dependencies or [];
+  dependencyLines =
+    lib.concatMapStringsSep "\n" (
+      dep: let
+        r = webcIdent dep;
+      in "${builtins.toJSON r.fullName} = ${builtins.toJSON r.version}"
+    )
+    dependencies;
+
+  # The webc packages this one depends on, and their transitive closure. Each
+  # carries a `.treeEntry` (its built webc at owner/name/version.webc); the shim
+  # symlinkJoins the closure into one `--include-webc` tree so the deps resolve.
+  depWebcs = map (dep: self {package = dep;}) dependencies;
+  closure = webcs: lib.unique (webcs ++ lib.concatMap (w: closure w.depWebcs) webcs);
+  depTree =
+    if depWebcs == []
+    then null
+    else
+      pkgs.symlinkJoin {
+        name = "webc-deps-${name}";
+        paths = map (w: w.treeEntry) (closure depWebcs);
+      };
 
   wrapWasmerPackage = pkgs.callPackage ./wrap-wasmer-package.nix {};
 
@@ -116,9 +160,20 @@
 in
   pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
     name = "wasmer-package-${name}";
-    passthru.shim = wrapWasmerPackage {
-      package = finalAttrs.finalPackage;
-      inherit name;
+    passthru = {
+      id = {inherit owner name version;};
+      inherit depWebcs;
+      # This package's built webc, placed at owner/name/version.webc so a set of
+      # them symlinkJoins into an `--include-webc` tree.
+      treeEntry = pkgs.runCommand "webc-${owner}-${name}-${version}" {} ''
+        d="$out/${owner}/${name}"
+        mkdir -p "$d"
+        ${wasmer}/bin/wasmer package build --quiet "${finalAttrs.finalPackage}/pkg/${name}" -o "$d/${version}.webc"
+      '';
+      shim = wrapWasmerPackage {
+        package = finalAttrs.finalPackage;
+        inherit name depTree;
+      };
     };
     buildCommand = ''
         set -euo pipefail
@@ -159,6 +214,14 @@ in
           EOF
         ''
       }
+
+        ${lib.optionalString (dependencies != []) ''
+              cat >> "$pkg_dir/wasmer.toml" <<EOF
+
+        [dependencies]
+        ${dependencyLines}
+        EOF
+      ''}
 
         append_command() {
           command_name="$1"

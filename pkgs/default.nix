@@ -179,7 +179,10 @@
     "python3"
   ];
 
-  makeWasmerPackage = pkgs.callPackage ./wasmer/make-wasmer-package.nix {};
+  makeWasmerPackage = pkgs.callPackage ./wasmer/make-wasmer-package.nix {
+    self = makeWasmerPackage;
+    wasmer = wasmerRuntime;
+  };
 
   wasmerLayer = import ./wasmer {
     inherit (pkgs) lib;

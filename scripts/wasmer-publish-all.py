@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 
+# Build every shipped Wasmer (webc) package and publish the ones the registry
+# doesn't already have. Each package built by make-wasmer-package.nix is a
+# self-contained webc — its runtime deps ride along as `fs`/`selfMounts` store
+# paths, not as registry `[dependencies]` — so the packages are independent and
+# publish order doesn't matter. (Older revisions topo-sorted a library/program
+# graph; that layout was dropped, so the ordering machinery went with it.)
+
 import argparse
 import hashlib
 import json
 import subprocess
 import sys
 import tempfile
-from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from urllib import error, parse, request
@@ -22,7 +28,6 @@ class Package:
     full_name: str
     version: str
     path: Path
-    deps: set[str]
 
 
 @dataclass(frozen=True)
@@ -89,13 +94,6 @@ def read_packages(pkg_root: Path) -> dict[str, Package]:
         if not isinstance(full_name, str) or not isinstance(version, str):
             raise SystemExit(f"Missing/invalid package.name or package.version in {toml_path}")
 
-        dep_keys = set()
-        deps = data.get("dependencies", {})
-        if isinstance(deps, dict):
-            for dep_name in deps.keys():
-                if isinstance(dep_name, str):
-                    dep_keys.add(dep_name)
-
         if full_name in packages:
             raise SystemExit(f"Duplicate package name {full_name} in {toml_path} and {packages[full_name].path / 'wasmer.toml'}")
 
@@ -103,49 +101,12 @@ def read_packages(pkg_root: Path) -> dict[str, Package]:
             full_name=full_name,
             version=version,
             path=pkg_dir,
-            deps=dep_keys,
         )
 
     if not packages:
         raise SystemExit(f"No packages found under {pkg_root}")
 
-    local_names = set(packages.keys())
-    normalized: dict[str, Package] = {}
-    for name, pkg in packages.items():
-        local_deps = {dep for dep in pkg.deps if dep in local_names}
-        normalized[name] = Package(
-            full_name=pkg.full_name,
-            version=pkg.version,
-            path=pkg.path,
-            deps=local_deps,
-        )
-    return normalized
-
-
-def topo_sort(packages: dict[str, Package]) -> list[Package]:
-    indegree = {name: len(pkg.deps) for name, pkg in packages.items()}
-    dependents: dict[str, set[str]] = {name: set() for name in packages}
-
-    for name, pkg in packages.items():
-        for dep in pkg.deps:
-            dependents[dep].add(name)
-
-    ready = deque(sorted([name for name, deg in indegree.items() if deg == 0]))
-    order: list[str] = []
-
-    while ready:
-        name = ready.popleft()
-        order.append(name)
-        for dependent in sorted(dependents[name]):
-            indegree[dependent] -= 1
-            if indegree[dependent] == 0:
-                ready.append(dependent)
-
-    if len(order) != len(packages):
-        cycle_nodes = sorted([name for name, deg in indegree.items() if deg > 0])
-        raise SystemExit(f"Dependency cycle detected among local packages: {', '.join(cycle_nodes)}")
-
-    return [packages[name] for name in order]
+    return packages
 
 
 def normalize_sha256(value: object) -> str | None:
@@ -260,7 +221,7 @@ def get_published_package_version(graphql_url: str, full_name: str, version: str
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build and publish all Wasmer packages from result/pkg in dependency order.")
+    parser = argparse.ArgumentParser(description="Build and publish all Wasmer packages from result/pkg.")
     parser.add_argument(
         "--registry",
         required=True,
@@ -284,7 +245,7 @@ def main() -> int:
     run(["nix", "build", ".#legacyPackages.x86_64-linux.allWasmer"], cwd=repo_root)
 
     packages = read_packages(pkg_root)
-    ordered = topo_sort(packages)
+    ordered = [packages[name] for name in sorted(packages)]
 
     graphql_url = graphql_endpoint_for_registry(args.registry)
     publish_registry = publish_registry_for_wasmer(args.registry)

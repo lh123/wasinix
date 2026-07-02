@@ -27,10 +27,16 @@
     ...
   }: let
     system = "x86_64-linux";
+    # wasmer runtime plus PR 6768 (offline resolution: --offline and --include-webc
+    # directory trees), vendored until it merges upstream. The patch is .rs only,
+    # so cargo deps stay cached.
+    wasmerRuntime = wasmer.packages.${system}.wasmer.overrideAttrs (old: {
+      patches = (old.patches or []) ++ [./patches/wasmer-offline-resolution.patch];
+    });
     wasix = import ./pkgs {
       inherit system nixpkgs;
       # used to run the behavioural passthru.tests on the webc packages.
-      wasmerRuntime = wasmer.packages.${system}.wasmer;
+      inherit wasmerRuntime;
     };
     lib = wasix.pkgs.lib;
 
@@ -71,13 +77,14 @@
           # sysroot + wasixcc carry their suites as passthru.tests (link/stdenv/
           # sysroot), so .#foundation.sysroot.tests / .wasixcc.tests work.
           inherit (wasix.toolchainTestPkgs) sysroot wasixcc;
+
           cargo-wasix = foundation.cargoWasix;
           rust-toolchain = foundation.wasixRustToolchain;
           libc = foundation.libc;
           compiler-rt = foundation.compiler-rt;
           libcxx = foundation.libcxx;
           llvm = {inherit (foundation.llvm) clang lld;};
-          runtime = wasmer.packages.${system}.wasmer; # the wasmer runtime (input)
+          runtime = wasmerRuntime; # the wasmer runtime (input, patched)
         };
         libraryMatrix = wasix.libraryMatrix; # <profile>.<lib>
         # <name> = wasm cross build; .webc = its webc package; .tests = its tests
@@ -139,7 +146,7 @@
         wasix.profileSets.${wasix.defaultProfileName}.ncurses
         wasix.pkgs.gnumake
         wasix.pkgs.pkg-config
-        wasmer.packages.${system}.wasmer
+        wasmerRuntime
 
         nixpkgs.legacyPackages.${system}.nix-fast-build
         nixpkgs.legacyPackages.${system}.nix-eval-jobs
@@ -174,7 +181,7 @@
       wasix-sysroot = foundation.sysroot;
       # (per-variant sysroot smoke tests are checks.wasix-sysroot-<variant>)
 
-      wasmer-bin = wasmer.packages.${system}.wasmer;
+      wasmer-bin = wasmerRuntime;
     };
 
     # `nix run .#update` — bump the source pins of the repo's own packages (the

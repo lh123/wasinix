@@ -1,7 +1,9 @@
-# Built in the default profile; embeds the off-profile bash.wasm at runtime via
-# preferredPackages.bash (the cross-profile resolution). zlib-ng/openssl/curl/
-# expat/libiconv auto-thread; gnugrep/gnused are our wasix builds (git bakes
-# their paths into scripts); gawk/coreutils are build-platform tools.
+# Built in the default profile; execs the off-profile bash at runtime via
+# SHELL_PATH=/bin/bash, mounted there from the bash webc dependency (see the
+# wasmer block below) rather than bundled in. preferredPackages.bash (the
+# cross-profile resolution) is still the build-time bash for the dependency ref.
+# zlib-ng/openssl/curl/expat/libiconv auto-thread; gnugrep/gnused are our wasix
+# builds (git bakes their paths into scripts); gawk/coreutils are build tools.
 {
   final,
   prev,
@@ -32,15 +34,20 @@ in
         # wasmer packaging deviations (name "git" comes from meta.mainProgram;
         # version/description/license/commands are all derived):
         wasmer = {
-          owner = "kilyanni";
           # certs for HTTPS clones, mounted where git/openssl look for them.
           fs."/etc/ssl" = "${final.cacert}/etc/ssl";
           commandEnv.git = {
             SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
             GIT_SSL_CAINFO = "/etc/ssl/certs/ca-bundle.crt";
           };
-          # git execs its libexec helpers + the off-profile bash.wasm at their
-          # absolute /nix/store paths; mount whatever git.wasm embeds.
+          # Shell ships once: git execs SHELL_PATH=/bin/bash (set below), and
+          # wasmer's use_package mounts this dependency's `bash` command there at
+          # load — so bash isn't bundled into git's webc. (Versionless ref of the
+          # off-profile bash; webcRefOf derives "owner/name"@version from it.)
+          dependencies = [bash];
+          # git still execs its own libexec helpers at absolute /nix/store paths;
+          # mount whatever git.wasm embeds. (bash is no longer embedded, so this
+          # no longer pulls in the shell.)
           autoSelfMount = true;
         };
       };
@@ -66,7 +73,7 @@ in
     postPatch =
       (old.postPatch or "")
       + ''
-        sed -i "s|BASIC_CFLAGS += -DSHELL_PATH=.*|BASIC_CFLAGS += -DSHELL_PATH='\"${bash}/bin/bash.wasm\"'|" Makefile
+        sed -i "s|BASIC_CFLAGS += -DSHELL_PATH=.*|BASIC_CFLAGS += -DSHELL_PATH='\"/bin/bash\"'|" Makefile
         substituteInPlace run-command.c \
           --replace-fail 'if (is_executable(buf.buf))' 'if (!access(buf.buf, F_OK))'
 
