@@ -29,6 +29,10 @@ MAX_NORMALIZE = 25
 NAR_SIZE_CAP = 256 * 1024 * 1024
 LIST_CAP = 250
 
+# Source-tree-tracking drvs rebuild on every diff and their pass output is
+# constant; no content signal (matches eval-diff.py).
+TREE_TRACKING = ("checks.treefmt",)
+
 
 def log(msg):
     print(msg, file=sys.stderr)
@@ -178,7 +182,7 @@ def main():
     rebuilt = sorted(
         a
         for a in head["jobs"].keys() & base["jobs"].keys()
-        if head["jobs"][a] != base["jobs"][a]
+        if head["jobs"][a] != base["jobs"][a] and a not in TREE_TRACKING
     )
     pairs = [
         {"attr": a, "output": name, "old": old, "new": new}

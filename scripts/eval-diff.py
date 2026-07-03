@@ -29,6 +29,11 @@ LIST_CAP = 250  # per section; a toolchain bump rebuilds everything
 # A drv move under these prefixes rebuilds the world downstream.
 MASS_REBUILD_PREFIXES = ("foundation.",)
 
+# Drvs that hash the whole source tree: they move on every diff and carry no
+# rebuild signal. Kept as CI jobs, excluded from the diff (content-diff.py
+# excludes them too).
+TREE_TRACKING = ("checks.treefmt",)
+
 
 def log(msg):
     print(msg, file=sys.stderr)
@@ -122,7 +127,11 @@ def section(title, attrs):
 def diff_of(base, head):
     both = head["jobs"].keys() & base["jobs"].keys()
     return {
-        "rebuilt": sorted(a for a in both if head["jobs"][a] != base["jobs"][a]),
+        "rebuilt": sorted(
+            a
+            for a in both
+            if head["jobs"][a] != base["jobs"][a] and a not in TREE_TRACKING
+        ),
         "added": sorted(head["jobs"].keys() - base["jobs"].keys()),
         "removed": sorted(base["jobs"].keys() - head["jobs"].keys()),
         "newErrors": {
@@ -136,14 +145,26 @@ def render(base, head):
     rebuilt, added, removed = d["rebuilt"], d["added"], d["removed"]
     new_errors = d["newErrors"]
 
+    ignored = sorted(
+        a
+        for a in TREE_TRACKING
+        if head["jobs"].get(a, base["jobs"].get(a)) != base["jobs"].get(a)
+    )
+    note = (
+        f" ({', '.join(f'`{a}`' for a in ignored)} tracks the source tree"
+        " and always rebuilds; ignored)"
+        if ignored
+        else ""
+    )
+
     total = len(head["jobs"])
     md = f"### Rebuild diff vs `{base['rev'][:12]}`\n\n"
     if not (rebuilt or added or removed or new_errors):
-        return md + "No rebuilds: eval identical to base.\n"
+        return md + f"No rebuilds{note or ': eval identical to base'}.\n"
     md += (
         f"**{len(rebuilt)}** of **{total}** jobs rebuild"
         f" · {len(added)} added · {len(removed)} removed"
-        f" · {len(new_errors)} new eval failures\n"
+        f" · {len(new_errors)} new eval failures{note}\n"
     )
 
     mass = sorted(
