@@ -9,15 +9,14 @@
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
 MAX_FAILURES_SHOWN = 25
 MAX_LOG_LINES = 30
 MAX_LOG_CHARS = 3000
-
-# nix's wording when a build fails because a dependency did, not on its own
-DEP_FAILURE_MARKER = "dependencies of derivation"
 
 
 def parse_junit(path):
@@ -39,7 +38,45 @@ def parse_junit(path):
     return cases
 
 
-def classify(cases):
+def load_drv_map(jobs_path):
+    # attr -> drvPath from the nix-eval-jobs output
+    drvs = {}
+    if not jobs_path:
+        return drvs
+    try:
+        with open(jobs_path) as f:
+            for line in f:
+                if line.strip():
+                    obj = json.loads(line)
+                    if not obj.get("error"):
+                        drvs[".".join(obj["attrPath"])] = obj["drvPath"]
+    except OSError as e:
+        print(f"WARN: no drv map ({e})", file=sys.stderr)
+    return drvs
+
+
+LOG_ROOT = "/nix/var/log/nix/drvs"
+
+
+def local_log(drv):
+    # The junit never carries build logs (nix-fast-build's `nix log` output
+    # lands on the console). A failed drv has a local log iff it ran itself;
+    # a dependency failure leaves none, which is how we tell them apart.
+    # Probe the log dir directly: `nix log` on a logless drv queries the
+    # substituters over the network, hundreds of times on a toolchain break.
+    base = drv.rsplit("/", 1)[-1]
+    stem = f"{LOG_ROOT}/{base[:2]}/{base[2:]}"
+    if not any(os.path.exists(stem + ext) for ext in ("", ".bz2", ".zst")):
+        return None
+    p = subprocess.run(
+        ["nix", "log", "--option", "substituters", "", drv],
+        capture_output=True, text=True,
+    )
+    # log exists but is unreadable: still a direct failure, just no excerpt
+    return p.stdout if p.returncode == 0 else ""
+
+
+def classify(cases, drvs):
     counts = {}  # class -> [total, failed]
     failed = []
     for c in cases:
@@ -47,9 +84,14 @@ def classify(cases):
         t[0] += 1
         if c["message"] is not None:
             t[1] += 1
-            c["transitive"] = c["class"] == "Build" and (
-                DEP_FAILURE_MARKER in c["message"] or DEP_FAILURE_MARKER in c["log"]
-            )
+            c["transitive"] = False
+            if c["class"] == "Build" and c["attr"] in drvs:
+                log = local_log(drvs[c["attr"]])
+                if log is not None:
+                    c["log"] = log
+                else:
+                    # never ran itself: a dependency failed first
+                    c["transitive"] = True
             failed.append(c)
     return counts, failed
 
@@ -137,25 +179,37 @@ def render_md(title, counts, failed):
         if cls in counts:
             total, bad = counts[cls]
             md += f"|{cls}|{total}|{bad or ''}|\n"
-    shown = failed[:MAX_FAILURES_SHOWN]
+
+    # root causes first, with their logs; dependency victims as a bare list
+    direct = [c for c in failed if not c.get("transitive")]
+    transitive = [c for c in failed if c.get("transitive")]
+    shown = direct[:MAX_FAILURES_SHOWN]
     for c in shown:
-        kind = " (dependency failed)" if c.get("transitive") else ""
         log = excerpt(c["log"])
         md += (
-            f"\n<details><summary>❌ <code>{c['attr']}</code>"
-            f" [{c['class']}]{kind}</summary>\n\n{c['message']}\n"
+            f"\n<details open><summary>❌ <code>{c['attr']}</code>"
+            f" [{c['class']}]</summary>\n\n{c['message']}\n"
         )
         if log:
             md += f"\n```\n{log}\n```\n"
         md += "\n</details>\n"
-    if len(failed) > len(shown):
-        md += f"\n... and {len(failed) - len(shown)} more failures.\n"
+    if len(direct) > len(shown):
+        md += f"\n... and {len(direct) - len(shown)} more direct failures.\n"
+    if transitive:
+        names = "\n".join(f"- `{c['attr']}`" for c in transitive[:MAX_FAILURES_SHOWN * 10])
+        if len(transitive) > MAX_FAILURES_SHOWN * 10:
+            names += f"\n- ... and {len(transitive) - MAX_FAILURES_SHOWN * 10} more"
+        md += (
+            f"\n<details><summary>failed because a dependency failed"
+            f" ({len(transitive)})</summary>\n\n{names}\n\n</details>\n"
+        )
     return md
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--junit", required=True)
+    ap.add_argument("--jobs", help="nix-eval-jobs output, for drv paths (nix log)")
     ap.add_argument("--diff-summary", help="summary json from eval-diff.py")
     ap.add_argument("--content-summary", help="summary json from content-diff.py")
     ap.add_argument("--reminders", help="updateReminders json from nix eval")
@@ -178,7 +232,9 @@ def main():
     reminders = dedupe_reminders(load_optional(args.reminders))
 
     cases = parse_junit(args.junit)
-    counts, failed = (None, []) if cases is None else classify(cases)
+    counts, failed = (
+        (None, []) if cases is None else classify(cases, load_drv_map(args.jobs))
+    )
     title = with_reminder_count(title_of(counts, failed, diff, content), reminders)
 
     with open(args.json_out, "w") as f:

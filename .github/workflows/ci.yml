@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
   actions: write
+  # in-job report posting on same-repo events (read-only on fork PRs, which
+  # test-report.yml covers instead)
+  checks: write
+  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -122,6 +126,7 @@ jobs:
           ./scripts/content-diff.py \
             --base-map base-map.json \
             --head-map eval-map.json \
+            --junit nix-fast-build-result.xml \
             --md-out content-diff.md \
             --summary-out content-summary.json
           cat content-diff.md >>"$GITHUB_STEP_SUMMARY"
@@ -134,6 +139,7 @@ jobs:
         run: |
           ./scripts/ci-report.py \
             --junit nix-fast-build-result.xml \
+            --jobs eval-jobs.jsonl \
             --diff-summary diff-summary.json \
             --content-summary content-summary.json \
             --reminders update-reminders.json \
@@ -152,3 +158,18 @@ jobs:
             content-diff.md
             nix-fast-build-result.xml
           if-no-files-found: error
+
+      # post the check run + sticky comment directly: bot-created PRs (the
+      # weekly pin bump) never fire workflow_run, and in-job is faster anyway.
+      # Fork PRs have a read-only token here; test-report.yml covers them.
+      - name: Post report
+        if: ${{ always() && steps.build.conclusion != 'skipped' &&
+          (github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        with:
+          script: |
+            const post = require('${{ github.workspace }}/scripts/post-report.js');
+            await post({github, context, core});

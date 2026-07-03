@@ -102,7 +102,9 @@ against the native tool.
   (narinfo narHash compare; self-referential paths get normalized with `nix
   store make-content-addressed`). `scripts/ci-report.py` folds all that and
   the JUnit results into the "Per-package status" check run and a sticky PR
-  comment (test-report.yml, workflow_run so fork PRs work).
+  comment (scripts/post-report.js): posted in-job for same-repo events (the
+  bot's pin-bump PRs never fire workflow_run), via test-report.yml for fork
+  PRs, where the in-job token is read-only.
 
 CA derivations were considered (early cutoff would show which rebuilds
 actually change outputs) and rejected for now: binary caches cannot serve

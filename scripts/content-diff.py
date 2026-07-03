@@ -20,6 +20,7 @@ import argparse
 import json
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 CACHE_URL = "https://nix-cache.wasix.org"
 CACHE_PUB_KEY = "wasinix-1:jvsqbOJGsZxMvg97fuyNCWCc+t2nn6uHB47kQCGNmXI="
@@ -57,6 +58,22 @@ def path_infos(paths, store=None):
 
 def basename(path):
     return path.rsplit("/", 1)[-1]
+
+
+def failed_attrs(junit_path):
+    # Attrs whose build (or eval) failed have no new output to compare.
+    if not junit_path:
+        return set()
+    try:
+        root = ET.parse(junit_path).getroot()
+    except (OSError, ET.ParseError) as e:
+        log(f"WARN: no junit ({e})")
+        return set()
+    return {
+        tc.get("name", "").strip('"')
+        for tc in root.iter("testcase")
+        if tc.find("failure") is not None and tc.get("classname") != "Upload"
+    }
 
 
 def self_referential(path, info):
@@ -161,6 +178,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base-map", required=True)
     ap.add_argument("--head-map", required=True)
+    ap.add_argument("--junit", help="skip attrs whose build failed")
     ap.add_argument("--md-out", required=True)
     ap.add_argument("--summary-out", required=True)
     args = ap.parse_args()
@@ -179,11 +197,14 @@ def main():
     with open(args.head_map) as f:
         head = json.load(f)
 
-    rebuilt = sorted(
+    failed = failed_attrs(args.junit)
+    moved = sorted(
         a
         for a in head["jobs"].keys() & base["jobs"].keys()
         if head["jobs"][a] != base["jobs"][a] and a not in TREE_TRACKING
     )
+    rebuilt = [a for a in moved if a not in failed]
+    not_built = len(moved) - len(rebuilt)
     pairs = [
         {"attr": a, "output": name, "old": old, "new": new}
         for a in rebuilt
@@ -191,21 +212,28 @@ def main():
         for old in [base.get("outputs", {}).get(a, {}).get(name)]
         if old and new
     ]
+    not_built_note = (
+        f"\n{not_built} rebuilt jobs failed to build and were not compared.\n"
+        if not_built
+        else ""
+    )
     if not pairs:
         return done(
-            "### Content diff\n\nNothing rebuilt; no outputs to compare.\n",
-            {"pairs": 0, "identical": 0, "changed": 0, "skipped": 0},
+            f"### Content diff\n\nNothing built to compare.\n{not_built_note}",
+            {"pairs": 0, "identical": 0, "changed": 0, "skipped": 0,
+             "notBuilt": not_built},
         )
 
     identical, changed, skipped = compare_all(pairs)
     log(f"{len(pairs)} pairs: {len(identical)} identical, {len(changed)} changed, {len(skipped)} skipped")
     done(
-        render(pairs, identical, changed, skipped),
+        render(pairs, identical, changed, skipped) + not_built_note,
         {
             "pairs": len(pairs),
             "identical": len(identical),
             "changed": len(changed),
             "skipped": len(skipped),
+            "notBuilt": not_built,
         },
     )
 
