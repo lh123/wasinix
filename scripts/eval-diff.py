@@ -56,6 +56,9 @@ def eval_jobs(flake, jobs_path):
         "nix", "run", "nixpkgs#nix-eval-jobs", "--",
         "--flake", flake,
         "--check-cache-status",
+        # meta rides along for ci-report.py: meta.position anchors failure
+        # annotations at the package definition
+        "--meta",
         "--option", "accept-flake-config", "true",
     ]
     log(f"$ {' '.join(cmd)}")

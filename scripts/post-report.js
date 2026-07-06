@@ -49,7 +49,17 @@ module.exports = async ({ github, context, core }) => {
   const summary = body.length > 60000 ? body.slice(0, 60000) + '\n\n(truncated)' : body;
 
   const { owner, repo } = context.repo;
-  const output = { title, summary };
+  // failure annotations anchored at the package definitions (meta.position);
+  // the API takes at most 50 per request
+  const annotations = (report.annotations ?? []).slice(0, 50).map((a) => ({
+    path: a.path,
+    start_line: a.line,
+    end_line: a.line,
+    annotation_level: 'failure',
+    title: a.title,
+    message: a.message,
+  }));
+  const output = { title, summary, ...(annotations.length ? { annotations } : {}) };
   const priorId = read('check-run-id');
   if (preliminary) {
     const created = await github.rest.checks.create({

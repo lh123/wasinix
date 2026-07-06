@@ -9,6 +9,7 @@
 
 import argparse
 import json
+import re
 import os
 import subprocess
 import sys
@@ -38,21 +39,36 @@ def parse_junit(path):
     return cases
 
 
-def load_drv_map(jobs_path):
-    # attr -> drvPath from the nix-eval-jobs output
-    drvs = {}
+def load_jobs_index(jobs_path):
+    # attr -> {drv, position} from the nix-eval-jobs output (--meta)
+    index = {}
     if not jobs_path:
-        return drvs
+        return index
     try:
         with open(jobs_path) as f:
             for line in f:
                 if line.strip():
                     obj = json.loads(line)
                     if not obj.get("error"):
-                        drvs[".".join(obj["attrPath"])] = obj["drvPath"]
+                        index[".".join(obj["attrPath"])] = {
+                            "drv": obj["drvPath"],
+                            "position": (obj.get("meta") or {}).get("position"),
+                        }
     except OSError as e:
-        print(f"WARN: no drv map ({e})", file=sys.stderr)
-    return drvs
+        print(f"WARN: no jobs index ({e})", file=sys.stderr)
+    return index
+
+
+def repo_relative_position(position):
+    # meta.position under a flake eval is inside the source store copy;
+    # positions elsewhere (nixpkgs drvs) have no file in this repo
+    if not position:
+        return None
+    file, _, line = position.rpartition(":")
+    m = re.match(r"^/nix/store/[^/]+/(.*)$", file)
+    if not m:
+        return None
+    return {"path": m.group(1), "line": int(line) if line.isdigit() else 1}
 
 
 LOG_ROOT = "/nix/var/log/nix/drvs"
@@ -76,7 +92,7 @@ def local_log(drv):
     return p.stdout if p.returncode == 0 else ""
 
 
-def classify(cases, drvs):
+def classify(cases, index):
     counts = {}  # class -> [total, failed]
     failed = []
     for c in cases:
@@ -85,8 +101,8 @@ def classify(cases, drvs):
         if c["message"] is not None:
             t[1] += 1
             c["transitive"] = False
-            if c["class"] == "Build" and c["attr"] in drvs:
-                log = local_log(drvs[c["attr"]])
+            if c["class"] == "Build" and c["attr"] in index:
+                log = local_log(index[c["attr"]]["drv"])
                 if log is not None:
                     c["log"] = log
                 else:
@@ -221,13 +237,29 @@ def main():
     notes = dedupe_notes(load_optional(args.notes))
 
     cases = parse_junit(args.junit)
-    counts, failed = (
-        (None, []) if cases is None else classify(cases, load_drv_map(args.jobs))
-    )
+    index = load_jobs_index(args.jobs)
+    counts, failed = (None, []) if cases is None else classify(cases, index)
     title = with_note_count(title_of(counts, failed, diff, content), notes)
 
+    # check-run annotations: direct failures anchored at the package
+    # definition (meta.position, which the overlay loader stamps to our
+    # files); transitive victims stay in the summary list
+    annotations = []
+    for c in failed:
+        if c.get("transitive"):
+            continue
+        pos = repo_relative_position((index.get(c["attr"]) or {}).get("position"))
+        if pos is None:
+            continue
+        annotations.append({
+            "path": pos["path"],
+            "line": pos["line"],
+            "title": f"{c['attr']} [{c['class']}]",
+            "message": (c["message"] + "\n\n" + excerpt(c["log"]))[:2000],
+        })
+
     with open(args.json_out, "w") as f:
-        json.dump({"title": title, "failed": len(failed)}, f)
+        json.dump({"title": title, "failed": len(failed), "annotations": annotations}, f)
     with open(args.md_out, "w") as f:
         f.write(render_md(title, counts, failed) + render_notes(notes))
     print(title, file=sys.stderr)

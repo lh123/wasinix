@@ -20,6 +20,7 @@ in {
           "--disable-samples"
           "--disable-tests"
           "--disable-tools"
+          "--disable-renaming"
         ];
         # The stock default data dir is $out's store path, unresolvable inside
         # a wasm guest. Point it at the stable path the icu-data webcs mount;
@@ -42,12 +43,20 @@ in {
         preConfigure = ''
           cp config/mh-linux config/mh-unknown
         '';
-        # icu < 67 cannot package data with --disable-tools ("this ICU cannot
-        # build its own data"); install the tarball's prebuilt little-endian
-        # archive, which is what >= 67 repackages anyway.
-        postInstall = lib.optionalString (lib.versionOlder base.version "67") ''
-          install -Dm444 -t "$out/share/icu/${base.version}" data/in/icudt*l.dat
-        '';
+        postInstall =
+          # --disable-renaming strips the _NN suffix from the lib's exports but
+          # does not touch the installed header, which defaults renaming on;
+          # flip it so consumers don't reference the suffixed symbols.
+          ''
+            substituteInPlace "$dev/include/unicode/uconfig.h" \
+              --replace-fail '#define U_DISABLE_RENAMING 0' '#define U_DISABLE_RENAMING 1'
+          ''
+          # icu < 67 cannot package data with --disable-tools ("this ICU cannot
+          # build its own data"); install the tarball's prebuilt little-endian
+          # archive, which is what >= 67 repackages anyway.
+          + lib.optionalString (lib.versionOlder base.version "67") ''
+            install -Dm444 -t "$out/share/icu/${base.version}" data/in/icudt*l.dat
+          '';
       }
       base;
   in
