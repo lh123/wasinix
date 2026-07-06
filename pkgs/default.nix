@@ -63,6 +63,7 @@
 
   wasixOverlay = import ./overlay {
     inherit toolchain nixpkgs preferredProfilePackages wasixRustPlatform;
+    inherit (pkgs) nix-update-script;
   };
   mkWasixPkgs = import ./set/mk-pkgs.nix {inherit system nixpkgs mkWasixStdenv wasixOverlay;};
   nixpkgsByProfile = lib.mapAttrs (_: spec: mkWasixPkgs spec) profilesCfg.profiles;

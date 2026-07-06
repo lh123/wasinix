@@ -74,7 +74,8 @@ in
       # nix-update needs version + src on the drv it evals: the wrapper has
       # neither, so point it at the unwrapped package
       updateScript = {
-        command = nix-update-script {extraArgs = ["--flake"];};
+        # --src-only: the lockfile is in-source, nothing vendored to update
+        command = nix-update-script {extraArgs = ["--flake" "--src-only"];};
         attrPath = "toolchain.wasixcc.unwrapped";
       };
     };

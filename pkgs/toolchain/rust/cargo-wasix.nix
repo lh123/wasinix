@@ -85,7 +85,9 @@ in
       # nix-update needs version + src on the drv it evals: the wrapper has
       # neither, so point it at the unwrapped package
       updateScript = {
-        command = nix-update-script {extraArgs = ["--flake"];};
+        # --src-only: upstream ships no Cargo.lock, so nix-update's lockfile
+        # extraction cannot work; the vendored lock is the regen hook's job
+        command = nix-update-script {extraArgs = ["--flake" "--src-only"];};
         attrPath = "toolchain.cargo-wasix.unwrapped";
       };
       # default predicate: fires in the change that bumps cargo-wasix

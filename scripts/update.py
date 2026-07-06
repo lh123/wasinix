@@ -235,6 +235,9 @@ def run_update_script(t):
     # bare tool names pass through
     if "/" in cmd[0] and not cmd[0].startswith("/"):
         cmd[0] = str(REPO / cmd[0])
+    # store-path commands (nix-update-script) may not be realized here
+    if cmd[0].startswith("/nix/store/") and not os.path.exists(cmd[0]):
+        run(["nix-store", "--realise", "/".join(cmd[0].split("/")[:4])])
     env = os.environ.copy()
     env["UPDATE_NIX_ATTR_PATH"] = t.attr
     if t.file:
@@ -255,9 +258,11 @@ def run_update_script(t):
     for line in reversed(out.splitlines()):
         if line.startswith("up to date"):
             return line
-        m = re.search(r"(\S+ -> \S+?)( in /|$)", line)
+        m = re.search(r"(\S+) -> (\S+?)( in /|$)", line)
         if m:
-            return m.group(1)
+            if m.group(1) == m.group(2):
+                return f"up to date ({m.group(1)})"
+            return f"{m.group(1)} -> {m.group(2)}"
     return None
 
 

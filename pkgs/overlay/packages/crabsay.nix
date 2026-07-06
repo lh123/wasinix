@@ -1,7 +1,11 @@
 # crabsay, a ferris-says clone in Rust. Not in nixpkgs, so built from source
 # via the wasix rustPlatform, which installs the .wasm and sets the eh profile
 # and meta.platforms like any other rust CLI here.
-{final, ...}:
+{
+  final,
+  nix-update-script,
+  ...
+}:
 final.rustPlatform.buildRustPackage {
   pname = "crabsay";
   version = "0-unstable-2023-02-22";
@@ -15,7 +19,7 @@ final.rustPlatform.buildRustPackage {
   passthru = {
     wasix.shipped = true;
     # upstream cuts no releases, so track its default branch
-    updateScript = final.buildPackages.nix-update-script {extraArgs = ["--flake" "--version=branch"];};
+    updateScript = nix-update-script {extraArgs = ["--flake" "--version=branch"];};
   };
   meta = {
     description = "ferris-says clone, built to WASIX";
