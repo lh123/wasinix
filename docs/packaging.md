@@ -94,7 +94,8 @@ Serve the output from any static file host, or install directly:
 wheels.nix entry lands in the registry automatically. Its test suite
 (`checks.python-registry`) walks the index for hash/metadata integrity and
 pip-installs representative packages (deps resolved from the index too), then
-imports them under wasmer.
+imports them under wasmer. CI publishes the index to GitHub Pages after every
+green main build (`publish-index` in ci.yml).
 
 ## Tests
 

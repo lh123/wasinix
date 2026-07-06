@@ -100,6 +100,16 @@ def main() -> None:
 
     root = [f'    <a href="{p}/">{p}</a><br/>' for p in sorted(projects)]
     (out / "simple" / "index.html").write_text(page("Simple index", root))
+    # landing page for humans; pip only ever sees simple/
+    (out / "index.html").write_text(
+        page(
+            "WASIX Python package index",
+            [
+                '    <p>pip install --index-url &lt;this url&gt;/simple &lt;package&gt;</p>',
+                '    <a href="simple/">simple/</a>',
+            ],
+        )
+    )
     print(f"indexed {sum(map(len, projects.values()))} wheels across {len(projects)} projects")
 
 
