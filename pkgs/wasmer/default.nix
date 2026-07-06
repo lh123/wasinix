@@ -8,6 +8,7 @@
   # wasmer runtime for passthru.tests; null -> pkgs.wasmer.
   wasmer ? null,
   makeWasmerPackage,
+  posOf,
   preferredProfilePackages,
   # the default-profile cross set, for tests that cross-build a consumer
   # program (e.g. icu-data's smoke test).
@@ -18,7 +19,7 @@
   packagesDir,
 }: let
   testLib = import ./test-lib.nix {inherit pkgs wasmer;};
-  mkTestGroup = import ../lib/test-group.nix {inherit pkgs lib;};
+  mkTestGroup = import ../lib/test-group.nix {inherit pkgs lib posOf;};
 
   # Collect tests from packages/<overlayName>/tests/: every *.nix file except
   # helpers.nix contributes tests, called with only the args it declares. The
@@ -44,8 +45,16 @@
         builtins.foldl' (
           acc: fname: let
             f = import (dir + "/${fname}");
+            # each test drv points at the file defining it
+            stamp = drv:
+              drv.overrideAttrs (_old: {
+                pos = {
+                  file = toString (dir + "/${fname}");
+                  line = 1;
+                };
+              });
           in
-            acc // f (builtins.intersectAttrs (lib.functionArgs f) scope)
+            acc // lib.mapAttrs (_: stamp) (f (builtins.intersectAttrs (lib.functionArgs f) scope))
         ) {}
         testFiles;
     in

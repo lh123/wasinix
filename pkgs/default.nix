@@ -96,7 +96,10 @@
   # shipped-package tests: per-variant sysroot smoke tests on `sysroot`,
   # per-profile link + stdenv tests on `wasixcc`. Built here (not in the flake)
   # because they need the per-profile toolchain and the wasmer runtime.
-  mkTestGroup = import ./lib/test-group.nix {inherit pkgs lib;};
+  mkTestGroup = import ./lib/test-group.nix {
+    inherit pkgs lib;
+    inherit (wasixLib) posOf;
+  };
   toolchainTestPkgs = {
     sysroot = toolchain.sysroot.overrideAttrs (o: {
       passthru = (o.passthru or {}) // {tests = mkTestGroup "sysroot" toolchain.tests;};
@@ -203,11 +206,13 @@
   makeWasmerPackage = pkgs.callPackage ./wasmer/make-wasmer-package.nix {
     self = makeWasmerPackage;
     wasmer = wasmerRuntime;
+    inherit (wasixLib) posOf;
   };
 
   wasmerLayer = import ./wasmer {
     inherit (pkgs) lib;
     inherit pkgs makeWasmerPackage preferredProfilePackages shippedCommands;
+    inherit (wasixLib) posOf;
     crossPkgs = nixpkgsByProfile.${defaultProfileName};
     wasmer = wasmerRuntime;
     packagesDir = ./overlay/packages;

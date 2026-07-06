@@ -38,6 +38,23 @@ in rec {
 
   wasixMetaOf = drv: (drv.passthru or {}).wasix or {};
 
+  # meta.position ("file:line") as a mkDerivation `pos` argument, so
+  # generated drvs (test groups, webc packaging) inherit their subject's
+  # position and `nix edit` lands somewhere useful.
+  posOf = drv: let
+    p = drv.meta.position or null;
+    m =
+      if p == null
+      then null
+      else builtins.match "(.*):([0-9]+)" (toString p);
+  in
+    if m == null
+    then null
+    else {
+      file = builtins.elemAt m 0;
+      line = lib.toInt (builtins.elemAt m 1);
+    };
+
   hasUpdateNotes = drv: let
     r = builtins.tryEval ((wasixMetaOf drv).updateNotes or [] != []);
   in

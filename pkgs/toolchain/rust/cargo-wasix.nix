@@ -39,6 +39,7 @@
       cp ${./cargo-wasix.Cargo.lock} Cargo.lock
     '';
 
+    # TODO: Is this necessary?
     installPhase = ''
       runHook preInstall
       mkdir -p "$out/bin"

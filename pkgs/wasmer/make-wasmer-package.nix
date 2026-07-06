@@ -18,7 +18,10 @@
   wasmer,
   # this function itself, to build dependency webcs.
   self,
+  posOf,
 }: {package}: let
+  # the wasmer package and its webc point back at the package definition
+  packagePos = posOf package;
   w = package.passthru.wasmer or {};
 
   # Coerce a version to semver MAJOR.MINOR.PATCH (wasmer rejects anything
@@ -152,12 +155,13 @@
 in
   pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
     name = "wasmer-package-${name}";
+    pos = packagePos;
     passthru = {
       id = {inherit owner name version;};
       inherit depWebcs;
       # The built webc at owner/name/version.webc, ready to symlinkJoin into an
       # --include-webc tree.
-      webc = pkgs.runCommand "webc-${owner}-${name}-${version}" {} ''
+      webc = pkgs.runCommand "webc-${owner}-${name}-${version}" (pkgs.lib.optionalAttrs (packagePos != null) {pos = packagePos;}) ''
         d="$out/${owner}/${name}"
         mkdir -p "$d"
         ${wasmer}/bin/wasmer package build --quiet "${finalAttrs.finalPackage}/pkg/${name}" -o "$d/${version}.webc"

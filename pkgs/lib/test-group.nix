@@ -5,10 +5,19 @@
 {
   pkgs,
   lib,
+  posOf,
 }: name: tests: let
+  # The group carries the first test's position, so `nix edit` on a
+  # checks.<name> aggregate lands in that package's tests.
+  firstPos = let
+    names = builtins.attrNames tests;
+  in
+    if names == []
+    then null
+    else posOf tests.${builtins.head names};
   # Referencing each subtest's path forces it to build; `test -e` works whether
   # the output is a file or a directory.
-  all = pkgs.runCommand "test-all-${name}" {} ''
+  all = pkgs.runCommand "test-all-${name}" (lib.optionalAttrs (firstPos != null) {pos = firstPos;}) ''
     ${lib.concatMapStringsSep "\n" (n: "test -e ${tests.${n}}") (builtins.attrNames tests)}
     touch $out
   '';
