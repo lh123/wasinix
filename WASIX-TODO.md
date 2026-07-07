@@ -93,6 +93,20 @@ Status: 🔴 needs upstream fix · 🟡 workaround in place · 🟢 fixed.
 
 ## Rust
 
+### library/Cargo.lock pins libc 0.2.183 from two sources 🟡
+- std depends on the libc fork via a direct git dependency while the other
+  library crates (dlmalloc, panic_unwind, std_detect, test, unwind) stay on
+  registry libc. Since the fork's port matches the version the workspace
+  resolves (both 0.2.183 as of v2026-07-07.2+rust-1.96), the lockfile carries
+  the same name+version from two sources: importCargoLock keys vendor dirs by
+  name+version, the second symlink collides, and the toolchain cannot be
+  vendored. Wasix std also mixes crates built against two different libcs.
+- Workaround: `toolchain/rust/libc-patch-crates-io.patch` routes crates-io
+  libc to the fork via `[patch.crates-io]` (applied in postPatch);
+  `library.Cargo.lock` is the matching regenerated lock for vendor.nix.
+- Fix: merge the patch into wasix-org/rust; drop both files (and the
+  rust-toolchain update note) with the first tag that includes it.
+
 ### Rust binaries exited 70 in std init: toolchain built on the stable channel 🟢
 - rustc only emits `--max-memory=4GiB` for a shared (threaded) memory off the
   stable channel; built on stable, the memory came out non-growable and the

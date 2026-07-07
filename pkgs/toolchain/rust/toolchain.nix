@@ -43,7 +43,7 @@
   withDynamicLinking ? true,
 }: let
   inherit (lib) optionals optionalString;
-  version = "2026-07-03.1+rust-1.90";
+  version = "2026-07-07.2+rust-1.96";
 
   hostTriple = "x86_64-unknown-linux-gnu";
 
@@ -53,17 +53,17 @@
     repo = "rust";
     tag = "v${version}";
     fetchSubmodules = true;
-    hash = "sha256-am5SBlIW/Ff1EVvfo0KMBYPu3X7Ke0lQSqUEW+VELs0=";
+    hash = "sha256-mwL9EpuDPpcOOEVAA7RSpQVhNuE38Z1Xb4iBwkB8xG4=";
   };
 
   # stage0 bootstrap compiler: the upstream release pinned in src/stage0, which
   # x.py would otherwise download itself.
   bootstrap = stdenv.mkDerivation {
     pname = "rust-bootstrap";
-    version = "1.89.0";
+    version = "1.95.0";
     src = fetchurl {
-      url = "https://static.rust-lang.org/dist/2025-08-07/rust-1.89.0-${hostTriple}.tar.xz";
-      hash = "sha256-xPJ5axDuiGAB8HmbxAyuo4dGQDozw3nXeHjE9Gg/m1E=";
+      url = "https://static.rust-lang.org/dist/2026-04-16/rust-1.95.0-${hostTriple}.tar.xz";
+      hash = "sha256-LgM48Y7LqkoPYxuegOi44mu2/nfdVFT7qKcM+WwehKE=";
     };
     nativeBuildInputs = [autoPatchelfHook];
     buildInputs = [stdenv.cc.cc.lib zlib];
@@ -82,14 +82,14 @@
   # lockfile. vendor.nix vendors each and produces one source-replacement config;
   # crates-io and the cc-rs/libc git forks are vendored separately (vendor.nix
   # explains why the split is required).
-  vendor = import ./vendor.nix {inherit lib rustPlatform linkFarm formats;} (
-    map (p: "${src}/${p}") [
-      "Cargo.lock"
-      "library/Cargo.lock"
-      "src/tools/cargo/Cargo.lock"
-      "src/bootstrap/Cargo.lock"
-    ]
-  );
+  vendor = import ./vendor.nix {inherit lib rustPlatform linkFarm formats;} [
+    "${src}/Cargo.lock"
+    # the tag's lock regenerated with libc-patch-crates-io.patch applied;
+    # drop together with the patch
+    ./library.Cargo.lock
+    "${src}/src/tools/cargo/Cargo.lock"
+    "${src}/src/bootstrap/Cargo.lock"
+  ];
 
   # rust bootstrap's cc_detect.rs looks for a `-wasi` target's C compiler at
   # $WASI_SDK_PATH/bin/<target>-clang[++]; synthesize that layout from the wasix
@@ -150,9 +150,10 @@ in
       CARGO_NET_OFFLINE = "true";
       # The wasix C toolchain for the std targets' C compiler detection (cc_detect.rs).
       WASI_SDK_PATH = "${wasiSdk}";
-      # x.py runs the freshly-built stage2 rustc, which has no rpath for
-      # zlib/libstdc++ until autoPatchelf fixes the output, so expose them here.
-      LD_LIBRARY_PATH = lib.makeLibraryPath [zlib stdenv.cc.cc.lib];
+      # Binaries made during the build run without store rpaths (autoPatchelf
+      # only fixes the output): stage2 rustc needs zlib/libstdc++, and since
+      # 1.96 the bootstrap tool links liblzma.
+      LD_LIBRARY_PATH = lib.makeLibraryPath [zlib xz stdenv.cc.cc.lib];
     };
 
     # Apply the fork's LLVM patch (build-wasix.sh step 1), install the vendor
@@ -161,6 +162,9 @@ in
     postPatch = ''
       patchShebangs src/etc x.py configure
       ( cd src/llvm-project && patch -p1 < ../../wasix-llvm.patch )
+      # pending upstream: single-source libc in library/Cargo.lock, which
+      # importCargoLock cannot vendor otherwise (WASIX-TODO.md, Rust section)
+      patch -p1 < ${./libc-patch-crates-io.patch}
       mkdir -p .cargo
       cp ${vendor.cargoConfig} .cargo/config.toml
       ln -s ${vendor.cratesIoVendor} vendor
@@ -195,6 +199,10 @@ in
         "--set=target.${hostTriple}.linker=${stdenv.cc}/bin/cc"
         "--set=llvm.download-ci-llvm=false"
         "--set=llvm.ninja=true"
+        # On since 1.96 in configure's default (dist) profile; without
+        # build.vendor (see CARGO_NET_OFFLINE above) bootstrap then scans
+        # $CARGO_HOME/registry/src, which the sandbox doesn't have, and panics.
+        "--set=rust.remap-debuginfo=false"
         "--set=target.wasm32-wasmer-wasi.wasi-root=${wasixSysrootEh}"
         # Pure-Rust compiler-builtins for the wasm targets (as nixpkgs does for
         # wasm32-unknown-unknown); otherwise the `c` feature pulls in cc-rs, and
@@ -219,15 +227,17 @@ in
       runHook postBuild
     '';
 
-    # cargo is a ToolRustc, so `--stage 2 cargo` lands its binary in
-    # stage1-tools-bin/, outside the stage2 sysroot: copy it in. stage2 also
-    # leaves lib/rustlib/{src,rustc-src}/rust as symlinks into the build dir,
-    # which would dangle in $out; drop them (release artifacts omit them too).
+    # cargo is a ToolRustc built with the stage-1 compiler, so it lands in a
+    # tools-bin dir outside the stage2 sysroot: copy it in. Since 1.96 that dir
+    # is named for build_compiler.stage + 1 (stage2-tools-bin), where 1.90
+    # named it for the stage itself (stage1-tools-bin). stage2 also leaves
+    # lib/rustlib/{src,rustc-src}/rust as symlinks into the build dir, which
+    # would dangle in $out; drop them (release artifacts omit them too).
     installPhase = ''
       runHook preInstall
       mkdir -p "$out"
       cp -a "build/${hostTriple}/stage2/." "$out/"
-      install -Dm755 "build/${hostTriple}/stage1-tools-bin/cargo" "$out/bin/cargo"
+      install -Dm755 "build/${hostTriple}/stage2-tools-bin/cargo" "$out/bin/cargo"
       rm -rf "$out/lib/rustlib/src" "$out/lib/rustlib/rustc-src"
       runHook postInstall
     '';
@@ -247,6 +257,10 @@ in
       supportedProfiles = ["eh"] ++ optionals withDynamicLinking ["ehpic"];
 
       updateScript = nix-update-script {extraArgs = ["--flake"];};
+
+      wasix.updateNotes = [
+        {message = "libc-patch-crates-io.patch is vendored pending upstream; drop it and library.Cargo.lock once the tag includes the fix, else re-apply and regenerate the lock";}
+      ];
     };
 
     meta = with lib; {
