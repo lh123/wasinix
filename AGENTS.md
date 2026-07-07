@@ -47,6 +47,9 @@ scripts/update.py    pin updater (nix run .#update)
   Vendor pending fixes as `.patch` files (placed per the patches rule
   above); when a workaround is needed to ship, track it in `WASIX-TODO.md`
   with the upstream fix identified.
+- When starting a nix build, print the build logs and redirect them to a file.
+  This helps track down build issues faster without needing to wait for the full
+  build to complete, as well as to gauge the progress of long-running builds.
 
 ## Checking your work
 
