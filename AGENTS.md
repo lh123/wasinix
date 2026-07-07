@@ -51,6 +51,30 @@ scripts/update.py    pin updater (nix run .#update)
   This helps track down build issues faster without needing to wait for the full
   build to complete, as well as to gauge the progress of long-running builds.
 
+## Remote builds
+
+The toolchain and the full `.ci` sweep are expensive; building them locally is
+painful, and a stray system-default builder (e.g. a paid `nixbuild.net`) can
+cost real money. Route expensive builds to a remote builder you control.
+
+That builder is machine-specific, so it lives in a gitignored `.remote-builder`
+(copy `.remote-builder.example` and fill in host, key, system, features).
+`scripts/remote-builder.sh` turns it into ready-made flags; never hardcode a
+host or key.
+
+- `scripts/remote-builder.sh check`: configured and reachable?
+- Bulk: `nix-fast-build --skip-cached --flake
+  .#legacyPackages.x86_64-linux.ci --store "$(scripts/remote-builder.sh
+  store)"` (local eval, remote build), or `scripts/ci-build-remote.sh` for the
+  signed, cache-pushing CI set.
+- Single build: `nix build <targets> --max-jobs 0 --builders
+  "$(scripts/remote-builder.sh builders)" --builders-use-substitutes`.
+  `--max-jobs 0` is required, else nix still schedules jobs onto local slots or
+  the system default.
+
+Evals (`nix eval`, nix-eval-jobs) run fine locally. Diagnose a remote failure
+with `ssh "$(scripts/remote-builder.sh host)"` + `nix log`, not a rebuild.
+
 ## Checking your work
 
 - `git add` new files before `nix build`/`nix eval`; the flake only sees
