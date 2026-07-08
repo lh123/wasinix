@@ -32,10 +32,6 @@
       # The no-input passthrough runs clang without pinning the linker, so probes
       # like meson's `cc -Wl,--version` fail to find wasm-ld on PATH. TODO: upstream.
       ./wasixcc-pin-linker-in-passthrough.patch
-      # wasixcc links -lc++/-lc++abi into executables only, so a C++ .so (e.g. a
-      # CPython extension) is left with unresolved libc++ imports at load time.
-      # Link the C++ runtime into shared libs too. TODO: upstream.
-      ./wasixcc-link-cxx-runtime-into-shared-libs.patch
     ];
 
     doCheck = true;

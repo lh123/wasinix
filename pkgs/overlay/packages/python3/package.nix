@@ -27,6 +27,12 @@
       # Autoconf cache vars, equivalent to the wasix-org/cpython config.site/configure
       # patches; the build re-runs autoreconf, so fresh probes must see these.
       env = {
+        # The interpreter is a wasixcc dynamic-main; C++ extension wheels are side
+        # modules that dlopen into it. Pull the C++ runtime (--whole-archive -lc++
+        # -lc++abi) into the main and --export-all it, so those .so's resolve libc++
+        # as dynamic imports from this one shared copy (correct cross-module RTTI/EH)
+        # instead of each baking in its own.
+        WASIXCC_INCLUDE_CPP_SYMBOLS = "yes";
         # clang 21 defaults to -std=gnu23, breaking configure's "CC name" conftest.
         ac_cv_cc_name = "clang";
         # Features wasix genuinely lacks:
