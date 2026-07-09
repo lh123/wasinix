@@ -54,6 +54,19 @@ remote=$(sed -n 's/^\[\(.*\)\]$/\1/p' "$block" | head -1)
   exit 1
 }
 
+# TEMP DEBUG: capture what actually gets signed for a single small PUT.
+{
+  echo "=== s3/aws env (redacted) ==="
+  env | grep -iE 'aws_|s3_|rclone_|_proxy' | sed -E 's/=.+/=<set>/' || echo "(none)"
+  echo "=== config access-key prefix ==="
+  rclone config show "$remote" | grep -iE 'access_key_id|type|endpoint|region|provider' |
+    sed -E 's/(access_key_id = .{5}).*/\1…/'
+  echo "=== verbose single-file probe ==="
+  printf 'probe\n' >/tmp/ci-probe
+  rclone copy -vv --ignore-times /tmp/ci-probe "$remote:$INDEX_VOLUME/ci-probe/"
+} >&2 || echo "PROBE FAILED (see -vv above)" >&2
+# END DEBUG
+
 python3 pkgs/python-registry/publish.py \
   --registry "$registry" \
   --remote "$remote:$INDEX_VOLUME" \
