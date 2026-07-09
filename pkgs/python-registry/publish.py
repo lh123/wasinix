@@ -38,7 +38,18 @@ _spec.loader.exec_module(make_index)
 
 
 def rclone(*args):
-    cmd = ["rclone", "--quiet", *map(str, args)]
+    # The wasmer S3 proxy fails signature verification on concurrent requests
+    # (SignatureDoesNotMatch) and hangs on multipart uploads, so force serial,
+    # single-part transfers. 5Gi is the S3 single-PutObject ceiling.
+    cmd = [
+        "rclone",
+        "--quiet",
+        "--transfers",
+        "1",
+        "--s3-upload-cutoff",
+        "5Gi",
+        *map(str, args),
+    ]
     print(f"  $ {' '.join(cmd)}", file=sys.stderr)
     return subprocess.run(cmd)
 

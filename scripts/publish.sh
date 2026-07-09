@@ -27,13 +27,6 @@ done
   exit 1
 }
 
-# The R2 nix-cache credentials are present in the CI env; rclone's S3 backend
-# would pick these up ahead of the volume's own config creds and fail writes
-# with SignatureDoesNotMatch. The volume auth comes only from the rclone config
-# section below, so clear any ambient AWS creds.
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
-  AWS_DEFAULT_REGION AWS_REGION AWS_ENDPOINT_URL AWS_ENDPOINT_URL_S3
-
 block=$(mktemp)
 mkdir -p ~/.config/rclone
 # the credentials read path works once provisioned; the first run has none, so
@@ -53,19 +46,6 @@ remote=$(sed -n 's/^\[\(.*\)\]$/\1/p' "$block" | head -1)
   echo "no rclone remote section in the credentials output" >&2
   exit 1
 }
-
-# TEMP DEBUG: capture what actually gets signed for a single small PUT.
-{
-  echo "=== s3/aws env (redacted) ==="
-  env | grep -iE 'aws_|s3_|rclone_|_proxy' | sed -E 's/=.+/=<set>/' || echo "(none)"
-  echo "=== config access-key prefix ==="
-  rclone config show "$remote" | grep -iE 'access_key_id|type|endpoint|region|provider' |
-    sed -E 's/(access_key_id = .{5}).*/\1…/'
-  echo "=== verbose single-file probe ==="
-  printf 'probe\n' >/tmp/ci-probe
-  rclone copy -vv --ignore-times /tmp/ci-probe "$remote:$INDEX_VOLUME/ci-probe/"
-} >&2 || echo "PROBE FAILED (see -vv above)" >&2
-# END DEBUG
 
 python3 pkgs/python-registry/publish.py \
   --registry "$registry" \
