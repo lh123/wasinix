@@ -27,6 +27,13 @@ done
   exit 1
 }
 
+# The R2 nix-cache credentials are present in the CI env; rclone's S3 backend
+# would pick these up ahead of the volume's own config creds and fail writes
+# with SignatureDoesNotMatch. The volume auth comes only from the rclone config
+# section below, so clear any ambient AWS creds.
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN \
+  AWS_DEFAULT_REGION AWS_REGION AWS_ENDPOINT_URL AWS_ENDPOINT_URL_S3
+
 block=$(mktemp)
 mkdir -p ~/.config/rclone
 # the credentials read path works once provisioned; the first run has none, so
