@@ -105,11 +105,13 @@ echo "Source at $src; building remotely..."
 # builder only expands the $(...) inside attr. bash -l so nix/doppler
 # installed via nix profile are on PATH.
 status=0
+# .#scripts.ci-build provides nix-fast-build/nix-eval-jobs (pinned) and is
+# store-copied, so it runs against the archived flake source without a checkout.
 # shellcheck disable=SC2087 # client-side expansion is the point, see above
 ssh "${ssh_opts[@]}" "$remote" 'bash -l -s' <<REMOTE || status=$?
 set -uo pipefail
 export CI_ATTR="path:$src#$attr" RESULT_FILE="$remote_result"
-$runner bash "$src/scripts/ci-build.sh"
+$runner nix run --accept-flake-config "path:$src#scripts.ci-build"
 REMOTE
 
 if [ -n "$local_result" ]; then

@@ -27,8 +27,6 @@ done
   exit 1
 }
 
-# the rclone remote name `wasmer app volume credentials` emits
-remote="edge-${WASMER_APP#*/}"
 block=$(mktemp)
 mkdir -p ~/.config/rclone
 # the credentials read path works once provisioned; the first run has none, so
@@ -40,6 +38,14 @@ if ! wasmer app volume credentials "$WASMER_APP" --registry wasmer.io --format r
   wasmer app volume credentials "$WASMER_APP" --registry wasmer.io --format rclone >"$block"
 fi
 cat "$block" >>~/.config/rclone/rclone.conf
+
+# the section name the credentials snippet defines (edge-<app>-<volume>); parse
+# it rather than reconstruct, since the CLI mangles the volume into it.
+remote=$(sed -n 's/^\[\(.*\)\]$/\1/p' "$block" | head -1)
+[ -n "$remote" ] || {
+  echo "no rclone remote section in the credentials output" >&2
+  exit 1
+}
 
 python3 pkgs/python-registry/publish.py \
   --registry "$registry" \

@@ -174,29 +174,28 @@
         inherit ci;
 
         # CI shell steps as runnable apps with nix-pinned deps: `nix run
-        # .#scripts.<name>`. Each runs the checkout's script (like .#update
-        # below), so relative paths and siblings resolve; only the deps come
+        # .#scripts.<name>`. The script is store-copied, so this needs no git
+        # checkout (the remote CI builder runs ci-build over the store-copied
+        # flake source); a script's data and sibling paths resolve against the
+        # caller's CWD, which in CI is the checkout root. Only the deps come
         # from nix. The local-dev remote-builder scripts are $0-relative and
         # stay out.
         scripts = let
           p = wasix.pkgs;
-          run = name: runtimeInputs: cmd:
+          run = name: runtimeInputs: interp: file:
             p.writeShellApplication {
               inherit name;
               runtimeInputs = runtimeInputs ++ [p.git];
-              text = ''
-                cd "$(git rev-parse --show-toplevel)"
-                exec ${cmd} "$@"
-              '';
+              text = ''exec ${interp} ${file} "$@"'';
             };
         in {
-          ci-build = run "ci-build" [p.jq p.nix-eval-jobs p.nix-fast-build] "bash scripts/ci-build.sh";
-          rebuild-diff = run "rebuild-diff" [p.python3] "bash scripts/rebuild-diff.sh";
-          content-diff = run "content-diff" [p.python3] "python3 scripts/content-diff.py";
-          ci-report = run "ci-report" [p.python3] "python3 scripts/ci-report.py";
-          publish-eval-map = run "publish-eval-map" [p.awscli2] "bash scripts/publish-eval-map.sh";
-          bump-rel = run "bump-rel" [p.python3] "python3 pkgs/python-registry/bump-rel.py";
-          publish = run "publish" [wasmerRuntime p.rclone p.python3] "bash scripts/publish.sh";
+          ci-build = run "ci-build" [p.jq p.nix-eval-jobs p.nix-fast-build] "bash" ./scripts/ci-build.sh;
+          rebuild-diff = run "rebuild-diff" [p.python3] "bash" ./scripts/rebuild-diff.sh;
+          content-diff = run "content-diff" [p.python3] "python3" ./scripts/content-diff.py;
+          ci-report = run "ci-report" [p.python3] "python3" ./scripts/ci-report.py;
+          publish-eval-map = run "publish-eval-map" [p.awscli2] "bash" ./scripts/publish-eval-map.sh;
+          bump-rel = run "bump-rel" [p.python3] "python3" ./pkgs/python-registry/bump-rel.py;
+          publish = run "publish" [wasmerRuntime p.rclone p.python3] "bash" ./scripts/publish.sh;
         };
 
         # passthru.wasix.updateNotes (see pkgs/lib/default.nix): things to
