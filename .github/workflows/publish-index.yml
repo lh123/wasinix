@@ -58,10 +58,11 @@ jobs:
       - name: Build index
         run: nix build .#pythonRegistry -o registry-result --option accept-flake-config true
 
-      # the patched wasmer, rclone, and python3 come from .#scripts.publish;
-      # skipped until the WASMER_TOKEN secret is configured
       - name: Publish wheels to the index volume
         if: env.WASMER_TOKEN != ''
+        # This step is currently broken, due to an issue with Edge's S3 implementation.
+        # Until then, don't fail on publish errors, so that the GH Pages deployment still fires.
+        continue-on-error: true
         run: |
           nix run .#scripts.publish -- \
             --registry "$(readlink -f registry-result)" \
