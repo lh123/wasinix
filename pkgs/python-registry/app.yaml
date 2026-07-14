@@ -4,5 +4,5 @@ app_id: da_KWgIvtQUJAMp
 owner: kilyanni
 package: wasmer/static-web-server
 volumes:
-- name: python-index
-  mount: /public
+  - name: python-index
+    mount: /public
