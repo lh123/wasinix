@@ -1,7 +1,8 @@
+kind: wasmer.io/App.v0
 name: wasinix-python-index
 owner: kilyanni
 package: wasmer/static-web-server
 volumes:
-- name: python-index
-  mount: /public
-kind: wasmer.io/App.v0
+  - name: python-index
+    mount: /public
+app_id: da_nzrI7tJUGzdz
