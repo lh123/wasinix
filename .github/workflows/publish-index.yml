@@ -33,6 +33,8 @@ jobs:
       WASMER_TOKEN: ${{ secrets.WASMER_TOKEN }}
       WASMER_APP: wasmer/wasinix-python-index
       INDEX_VOLUME: python-index
+      # dev registry/Edge for now, to try the volume publish end to end
+      WASMER_REGISTRY: wasmer.wtf
     steps:
       - name: Checkout
         uses: actions/checkout@v4
