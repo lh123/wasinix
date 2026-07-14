@@ -30,7 +30,7 @@ jobs:
     # credentials at runtime (provisioning them on the first run). Job-level so
     # the publish step's condition can see whether it is configured.
     env:
-      WASMER_TOKEN: ${{ secrets.WASMER_TOKEN }}
+      WASMER_TOKEN: ${{ secrets.WASMER_TOKEN_DEV }}
       # the app itself is resolved from pkgs/python-registry/app.yaml (app_id)
       INDEX_VOLUME: python-index
       # dev registry/Edge for now, to try the volume publish end to end
