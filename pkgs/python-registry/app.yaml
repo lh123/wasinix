@@ -1,6 +1,6 @@
 kind: wasmer.io/App.v0
 name: python-registry
-app_id: da_RjPIgtQUmjzq
+app_id: da_nzrI7tJUGkeJ
 owner: kilyanni
 package: wasmer/static-web-server
 volumes:
