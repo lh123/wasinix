@@ -60,7 +60,15 @@ remote=$(sed -n 's/^\[\(.*\)\]$/\1/p' "$block" | head -1)
   exit 1
 }
 
+# The volume's S3 bucket is a per-deploy id, so discover it.
+# The endpoint hosts exactly one bucket, so just pick that one.
+bucket=$(rclone --quiet lsd "$remote:" | awk '{print $NF}' | head -1)
+[ -n "$bucket" ] || {
+  echo "could not list the volume's S3 bucket" >&2
+  exit 1
+}
+
 python3 pkgs/python-registry/publish.py \
   --registry "$registry" \
-  --remote "$remote:$INDEX_VOLUME" \
+  --remote "$remote:$bucket" \
   --rev "$rev"
