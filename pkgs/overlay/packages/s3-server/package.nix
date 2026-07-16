@@ -10,11 +10,19 @@ in
       rev = "a82795d558d81eb7a98b7a203775e57a675ad637";
       hash = "sha256-q3/C59rThhfNzwd6zUptQrcy/EZEvIG6RTSpe/8QqBQ=";
     };
+    # reserved-dir metadata + multipart fix, vendored pending upstream; touches
+    # no Cargo.lock, so cargoHash is unchanged (see wasix.updateNotes)
+    patches = [./patches/0001-fix-store-metadata-multipart-parts-in-a-reserved-dir.patch];
     # the CLI (structopt/dotenv/tracing-subscriber) is behind the binary feature.
     buildFeatures = ["binary"];
     cargoHash = "sha256-iq6FnobEju7DIHacvoFPTTJDhCKMY3R4NE/QQKWiW9I=";
 
-    passthru.wasix.shipped = true;
+    passthru.wasix = {
+      shipped = true;
+      updateNotes = [
+        {message = "drop patches/0001-fix-store-metadata-multipart-parts-in-a-reserved-dir.patch and bump the rev once the fix merges into wasix-org/s3-server";}
+      ];
+    };
 
     meta = {
       description = "Generic S3 server (wasix-org fork), built to WASIX";
