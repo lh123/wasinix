@@ -447,7 +447,7 @@ def project_page(project: str, files: list[tuple]) -> str:
     <style>{_CSS}    </style>
   </head>
   <body>
-    <p class="crumb"><a href="../">&larr; all packages</a></p>
+    <p class="crumb"><a href="../../">&larr; all packages</a></p>
     <h1>{html.escape(project)}</h1>
     <pre><code>pip install --index-url <span id="url">&lt;this index&gt;/</span> {html.escape(project)}</code></pre>
 {body}
