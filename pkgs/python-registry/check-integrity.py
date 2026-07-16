@@ -12,7 +12,9 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote
 
-ANCHOR = re.compile(r'<a href="([^"#]+)#sha256=([0-9a-f]{64})"([^>]*)>([^<]+)</a>')
+# the wheel anchor's opening tag; its visible text is the interpreter label
+# (plus a size span), so the filename comes from the href, not the link text.
+ANCHOR = re.compile(r'<a href="([^"#]+)#sha256=([0-9a-f]{64})"([^>]*)>')
 CORE_METADATA = re.compile(r'data-core-metadata="sha256=([0-9a-f]{64})"')
 
 
@@ -39,10 +41,8 @@ def main() -> None:
             continue
         page = (pdir / "index.html").read_text()
         anchored = set()
-        for href, digest, attrs, text in ANCHOR.findall(page):
+        for href, digest, attrs in ANCHOR.findall(page):
             fname = unquote(href)
-            if fname != text:
-                fail(f"{pdir.name}: link text {text!r} != href {href!r}")
             if "+wasix." not in fname:
                 fail(f"{pdir.name}: {fname} lacks the +wasix.N publication release")
             wheel = pdir / fname
