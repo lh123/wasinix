@@ -74,7 +74,7 @@ drop any `wasixcc-*.patch` that landed upstream. Check: `nix build .#wasixcc`
 and `.#toolchain.wasixcc.tests`.
 
 **wasmer**: the runtime every behavioural test runs under. flake.nix applies
-`patches/wasmer-offline-resolution.patch` (wasmer PR 6768) on top; drop it
+`patches/wasmer-offline-resolution.patch` (wasmer PR 6801) on top; drop it
 once the PR merges. A newer runtime can make `broken`-marked tests start
 passing, which fails them loudly (XPASS): remove the markers it names.
 

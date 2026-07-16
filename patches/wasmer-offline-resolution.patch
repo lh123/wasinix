@@ -1,26 +1,27 @@
-From 7da82f34bf6db5c9e7c709901eea76e06846bd7a Mon Sep 17 00:00:00 2001
-From: kilyanni <github@nkilian.org>
-Date: Wed, 1 Jul 2026 17:02:21 +0200
-Subject: [PATCH] feat: add CLI support for offline dependency resolution
-
----
- lib/cli/src/commands/run/wasi.rs              |  52 +--
- .../src/runtime/resolver/in_memory_source.rs  | 320 ++++++++++++++++--
- 2 files changed, 315 insertions(+), 57 deletions(-)
-
 diff --git a/lib/cli/src/commands/run/wasi.rs b/lib/cli/src/commands/run/wasi.rs
-index f110310aa0d9..56a02e5eb7f0 100644
+index f110310aa0d..4c32adf4379 100644
 --- a/lib/cli/src/commands/run/wasi.rs
 +++ b/lib/cli/src/commands/run/wasi.rs
-@@ -106,11 +106,17 @@ pub struct Wasi {
+@@ -38,7 +38,8 @@ use wasmer_wasix::{
+         module_cache::{FileSystemCache, ModuleCache},
+         package_loader::{BuiltinPackageLoader, PackageLoader},
+         resolver::{
+-            BackendSource, FileSystemSource, InMemorySource, MultiSource, Source, WebSource,
++            BackendSource, FileSystemSource, InMemorySource, LocalRegistrySource, MultiSource,
++            Source, WebSource,
+         },
+         task_manager::{
+             VirtualTaskManagerExt,
+@@ -106,11 +107,18 @@ pub struct Wasi {
      #[clap(long = "use", name = "USE")]
      pub(crate) uses: Vec<String>,
  
 -    /// List of webc packages that are explicitly included for execution
 -    /// Note: these packages will be used instead of those in the registry
-+    /// Webc packages to use instead of the registry ones: a `*.webc` file, or a
-+    /// directory tree of them resolved by location. Resolves named dependencies
-+    /// from local files, offline.
++    /// Webc packages to use instead of the registry ones: either a `*.webc`
++    /// file, or a directory laid out `<namespace>/<name>/<version>.webc` and
++    /// queried on demand like a registry. Resolves named dependencies from
++    /// local files, offline.
      #[clap(long = "include-webc", name = "WEBC")]
      pub(super) include_webcs: Vec<PathBuf>,
  
@@ -32,20 +33,27 @@ index f110310aa0d9..56a02e5eb7f0 100644
      /// List of injected atoms
      #[clap(long = "map-command", name = "MAPCMD")]
      pub(super) map_commands: Vec<String>,
-@@ -709,32 +715,36 @@ impl Wasi {
+@@ -709,32 +717,42 @@ impl Wasi {
      ) -> Result<MultiSource> {
          let mut source = MultiSource::default();
  
 -        // Note: This should be first so our "preloaded" sources get a chance to
 -        // override the main registry.
-+        // Local packages go first so they override the registry.
++        // Local packages go first so they override the registry. A directory
++        // is served on demand as a local registry; a single file is loaded
++        // eagerly under its manifest id.
          let mut preloaded = InMemorySource::new();
          for path in &self.include_webcs {
-             preloaded
+-            preloaded
 -                .add_webc(path)
 -                .with_context(|| format!("Unable to load \"{}\"", path.display()))?;
-+                .add_packages(path)
-+                .with_context(|| format!("Unable to load packages from \"{}\"", path.display()))?;
++            if path.is_dir() {
++                source.add_source(LocalRegistrySource::new(path)?);
++            } else {
++                preloaded
++                    .add_webc(path)
++                    .with_context(|| format!("Unable to load \"{}\"", path.display()))?;
++            }
          }
          source.add_source(preloaded);
  
@@ -88,85 +96,117 @@ index f110310aa0d9..56a02e5eb7f0 100644
  
          source.add_source(FileSystemSource::default());
  
-diff --git a/lib/wasix/src/runtime/resolver/in_memory_source.rs b/lib/wasix/src/runtime/resolver/in_memory_source.rs
-index c016c4df0cfe..0c396da23513 100644
---- a/lib/wasix/src/runtime/resolver/in_memory_source.rs
-+++ b/lib/wasix/src/runtime/resolver/in_memory_source.rs
-@@ -1,13 +1,12 @@
- use std::{
--    collections::{BTreeMap, HashMap, VecDeque},
--    fs::File,
-+    collections::{BTreeMap, HashMap},
-     path::{Path, PathBuf},
- };
- 
- use anyhow::{Context, Error};
- use wasmer_config::package::{NamedPackageId, PackageHash, PackageId, PackageIdent, PackageSource};
- 
--use crate::runtime::resolver::{PackageSummary, QueryError, Source};
+diff --git a/lib/wasix/src/runtime/resolver/local_registry_source.rs b/lib/wasix/src/runtime/resolver/local_registry_source.rs
+new file mode 100644
+index 00000000000..4c689ef4572
+--- /dev/null
++++ b/lib/wasix/src/runtime/resolver/local_registry_source.rs
+@@ -0,0 +1,440 @@
++use std::path::{Path, PathBuf};
++
++use anyhow::{Context, Error};
++use semver::Version;
++use wasmer_config::package::{
++    NamedPackageId, NamedPackageIdent, PackageHash, PackageId, PackageIdent, PackageSource,
++};
++
 +use crate::runtime::resolver::{PackageSummary, QueryError, Source, WebcHash};
- 
- /// A [`Source`] that tracks packages in memory.
- ///
-@@ -29,41 +28,10 @@ impl InMemorySource {
-         InMemorySource::default()
-     }
- 
--    /// Recursively walk a directory, adding all valid WEBC files to the source.
-+    /// Constructor wrapper over [`Self::add_packages`].
-     pub fn from_directory_tree(dir: impl Into<PathBuf>) -> Result<Self, Error> {
-         let mut source = InMemorySource::default();
--
--        let mut to_check: VecDeque<PathBuf> = VecDeque::new();
--        to_check.push_back(dir.into());
--
--        fn process_entry(
--            path: &Path,
--            source: &mut InMemorySource,
--            to_check: &mut VecDeque<PathBuf>,
--        ) -> Result<(), Error> {
--            let metadata = std::fs::metadata(path).context("Unable to get filesystem metadata")?;
--
--            if metadata.is_dir() {
--                for entry in path.read_dir().context("Unable to read the directory")? {
--                    to_check.push_back(entry?.path());
--                }
--            } else if metadata.is_file() {
--                let f = File::open(path).context("Unable to open the file")?;
--                if webc::detect(f).is_ok() {
--                    source
--                        .add_webc(path)
--                        .with_context(|| format!("Unable to load \"{}\"", path.display()))?;
--                }
--            }
--
--            Ok(())
--        }
--
--        while let Some(path) = to_check.pop_front() {
--            process_entry(&path, &mut source, &mut to_check)
--                .with_context(|| format!("Unable to add entries from \"{}\"", path.display()))?;
--        }
--
-+        source.add_packages(dir.into())?;
-         Ok(source)
-     }
- 
-@@ -103,6 +71,55 @@ impl InMemorySource {
-         Ok(())
-     }
- 
-+    /// Load every webc under `path` (a single file or a directory tree). `path`
-+    /// is the location-scheme root passed to [`Self::add_one`].
-+    pub fn add_packages(&mut self, path: impl AsRef<Path>) -> Result<(), Error> {
-+        let root = path.as_ref();
-+        // Error on a missing path instead of silently loading nothing.
++
++/// A [`Source`] backed by a directory tree laid out like a registry:
++/// `<root>/<namespace>/<name>/<version>.webc`, or `<root>/<name>/<version>.webc`
++/// for un-namespaced packages.
++///
++/// Queries are answered from the layout alone: a named query lists the queried
++/// package's directory and picks versions off the file names, so only the webcs
++/// that match the version constraint are ever opened. A large tree costs no
++/// more than the packages actually resolved.
++#[derive(Debug, Clone, PartialEq, Eq)]
++pub struct LocalRegistrySource {
++    root: PathBuf,
++}
++
++impl LocalRegistrySource {
++    pub fn new(root: impl Into<PathBuf>) -> Result<Self, Error> {
++        let root = root.into();
++        // Fail fast if the directory doesn't exist rather than
++        // leaving all packages to resolve to 'not found'
 +        anyhow::ensure!(
-+            root.exists(),
-+            "package path does not exist: \"{}\"",
++            root.is_dir(),
++            "package directory does not exist: \"{}\"",
 +            root.display()
 +        );
-+        let mut stack = vec![root.to_path_buf()];
++        Ok(LocalRegistrySource { root })
++    }
++
++    fn query_named(
++        &self,
++        named: &NamedPackageIdent,
++        query: &PackageSource,
++    ) -> Result<Vec<PackageSummary>, QueryError> {
++        let full_name = named.full_name();
++        let dir = match package_dir(&self.root, &full_name) {
++            // Either the name can't exist in this layout or nothing is
++            // published under it.
++            Some(dir) if dir.is_dir() => dir,
++            _ => {
++                return Err(QueryError::NotFound {
++                    query: query.clone(),
++                });
++            }
++        };
++
++        let constraint = named.version_or_default();
++        let mut matches =
++            published_versions(&dir).map_err(|error| QueryError::new_other(error, query))?;
++        matches.retain(|(version, _)| constraint.matches(version));
++        matches.sort_by(|(left, _), (right, _)| left.cmp(right));
++
++        if matches.is_empty() {
++            return Err(QueryError::NoMatches {
++                query: query.clone(),
++                archived_versions: Vec::new(),
++            });
++        }
++
++        // Only now is any webc opened, and only the matching ones.
++        matches
++            .into_iter()
++            .map(|(version, path)| {
++                let id = NamedPackageId {
++                    full_name: full_name.clone(),
++                    version,
++                };
++                load_summary(&path, Some(PackageId::Named(id)))
++            })
++            .collect::<Result<Vec<_>, Error>>()
++            .map_err(|error| QueryError::new_other(error, query))
++    }
++
++    fn query_hash(
++        &self,
++        hash: &PackageHash,
++        query: &PackageSource,
++    ) -> Result<Vec<PackageSummary>, QueryError> {
++        match self
++            .find_by_hash(hash)
++            .map_err(|error| QueryError::new_other(error, query))?
++        {
++            Some(summary) => Ok(vec![summary]),
++            None => Err(QueryError::NotFound {
++                query: query.clone(),
++            }),
++        }
++    }
++
++    /// Walk the tree for a webc with this hash, stopping at the first match.
++    /// This is the one query shape the layout can't index; a `.sha256` sidecar
++    /// rules a file in or out without opening it, anything else must be hashed.
++    fn find_by_hash(&self, hash: &PackageHash) -> Result<Option<PackageSummary>, Error> {
++        let Some(expected) = hash.as_sha256().map(|digest| digest.to_string()) else {
++            return Ok(None);
++        };
++
++        let mut stack = vec![self.root.clone()];
 +        while let Some(current) = stack.pop() {
 +            if current.is_dir() {
 +                for entry in std::fs::read_dir(&current)
@@ -174,133 +214,121 @@ index c016c4df0cfe..0c396da23513 100644
 +                {
 +                    stack.push(entry?.path());
 +                }
-+            } else if current.extension().and_then(|e| e.to_str()) == Some("webc") {
-+                self.add_one(root, &current)?;
++                continue;
 +            }
-+        }
-+        Ok(())
-+    }
++            if current.extension().and_then(|e| e.to_str()) != Some("webc") {
++                continue;
++            }
++            let matches = match read_sha256_sibling(&current) {
++                Some(claimed) => claimed
++                    .strip_prefix("sha256:")
++                    .unwrap_or(&claimed)
++                    .eq_ignore_ascii_case(&expected),
++                None => WebcHash::for_file(&current)
++                    .with_context(|| format!("Unable to hash \"{}\"", current.display()))?
++                    .as_hex()
++                    .eq_ignore_ascii_case(&expected),
++            };
++            if !matches {
++                continue;
++            }
 +
-+    /// Load one webc. Its id comes from `id_from_path(root, webc)` (swap that call
-+    /// for `id_from_filename`/`id_from_sidecar` to change scheme), else the
-+    /// manifest id. Checks an optional sha256. Unreadable webcs are skipped.
-+    fn add_one(&mut self, root: &Path, webc: &Path) -> Result<(), Error> {
-+        let mut summary = match PackageSummary::from_webc_file(webc) {
-+            Ok(summary) => summary,
-+            Err(e) if webc == root => {
-+                return Err(e).with_context(|| format!("Unable to load \"{}\"", webc.display()));
++            let id = id_from_path(&self.root, &current).map(PackageId::Named);
++            let summary = load_summary(&current, id)?;
++            // A sidecar may match the query and still misdescribe the file.
++            verify_sha256(&current, &summary.dist.webc_sha256, &expected)?;
++            return Ok(Some(summary));
++        }
++
++        Ok(None)
++    }
++}
++
++#[async_trait::async_trait]
++impl Source for LocalRegistrySource {
++    #[tracing::instrument(level = "debug", skip_all, fields(%package))]
++    async fn query(&self, package: &PackageSource) -> Result<Vec<PackageSummary>, QueryError> {
++        match package {
++            PackageSource::Ident(PackageIdent::Named(named)) => {
++                crate::block_in_place(|| self.query_named(named, package))
 +            }
-+            Err(e) => {
-+                tracing::warn!(path=%webc.display(), error=&*e, "Skipping unreadable webc");
-+                return Ok(());
++            PackageSource::Ident(PackageIdent::Hash(hash)) => {
++                crate::block_in_place(|| self.query_hash(hash, package))
 +            }
++            PackageSource::Url(_) | PackageSource::Path(_) => Err(QueryError::Unsupported {
++                query: package.clone(),
++            }),
++        }
++    }
++}
++
++/// The directory holding a package's published versions: the full name's
++/// components (namespace, then name) become path components under `root`.
++/// `None` for names the layout can't hold (empty or path-like components),
++/// rather than letting them escape the root.
++fn package_dir(root: &Path, full_name: &str) -> Option<PathBuf> {
++    let mut dir = root.to_path_buf();
++    for part in full_name.split('/') {
++        if part.is_empty() || part == "." || part == ".." || part.contains(std::path::is_separator)
++        {
++            return None;
++        }
++        dir.push(part);
++    }
++    Some(dir)
++}
++
++/// The versions published for one package: its directory's `<version>.webc`
++/// files, read from the names alone. No webc is opened.
++fn published_versions(dir: &Path) -> Result<Vec<(Version, PathBuf)>, Error> {
++    let mut versions = Vec::new();
++    for entry in dir
++        .read_dir()
++        .with_context(|| format!("Unable to read \"{}\"", dir.display()))?
++    {
++        let path = entry?.path();
++        let Some(version) = path
++            .file_name()
++            .and_then(|f| f.to_str())
++            .and_then(|f| f.strip_suffix(".webc"))
++            .and_then(|stem| stem.parse().ok())
++        else {
++            continue;
 +        };
-+        if let Some(identity) = id_from_path(root, webc)? {
-+            if let Some(expected) = &identity.expected_sha256 {
-+                verify_sha256(webc, &summary.dist.webc_sha256, expected)?;
-+            }
-+            summary.pkg.id = identity.id;
-+        }
-+        self.add(summary);
-+        Ok(())
++        versions.push((version, path));
 +    }
-+
-     pub fn get(&self, id: &PackageId) -> Option<&PackageSummary> {
-         match id {
-             PackageId::Named(ident) => {
-@@ -131,6 +148,118 @@ impl InMemorySource {
-     }
- }
- 
-+// Identity schemes. A built webc is anonymous (name stripped on build), so its id
-+// comes from the file location or a sidecar. `add_one` calls one of these; switch
-+// scheme by switching which. Each returns the id and an optional sha256 to verify,
-+// or `None` to fall back to the manifest id.
-+
-+/// A package id and an optional sha256 (hex) to verify the webc against.
-+struct ResolvedIdentity {
-+    id: PackageId,
-+    expected_sha256: Option<String>,
++    Ok(versions)
 +}
 +
-+/// christoph's scheme (Edge convention): `<namespace>--<name>@<version>.webc`, or
-+/// unnamespaced `<name>@<version>.webc`. `root` is unused.
-+#[allow(dead_code)] // inactive scheme; swap into `add_one` to use.
-+fn id_from_filename(_root: &Path, webc: &Path) -> Result<Option<ResolvedIdentity>, Error> {
-+    let Some((name, version)) = webc
-+        .file_name()
-+        .and_then(|f| f.to_str())
-+        .and_then(|f| f.strip_suffix(".webc"))
-+        .and_then(|stem| stem.rsplit_once('@'))
-+    else {
-+        return Ok(None);
-+    };
-+    let full_name = match name.split_once("--") {
-+        Some((namespace, name)) => format!("{namespace}/{name}"),
-+        None => name.to_string(),
-+    };
-+    let Ok(version) = version.parse() else {
-+        return Ok(None);
-+    };
-+    Ok(Some(ResolvedIdentity {
-+        id: PackageId::Named(NamedPackageId { full_name, version }),
-+        expected_sha256: read_sha256_sibling(webc),
-+    }))
-+}
-+
-+/// nikolas's scheme: `<namespace>/<name>/<version>.webc` (or `<name>/<version>
-+/// .webc`) relative to `root`. Each field is a path component, nothing to escape.
-+fn id_from_path(root: &Path, webc: &Path) -> Result<Option<ResolvedIdentity>, Error> {
-+    let Some(parts) = webc
-+        .strip_prefix(root)
-+        .ok()
-+        .and_then(|rel| rel.iter().map(|p| p.to_str()).collect::<Option<Vec<_>>>())
-+    else {
-+        return Ok(None);
-+    };
++/// The package id encoded by a webc's location under `root`
++/// (`<namespace>/<name>/<version>.webc` or `<name>/<version>.webc`), if it
++/// fits the layout. Used where a walk finds a file and its id must be derived
++/// backwards; named lookups go the other way via [`package_dir`].
++fn id_from_path(root: &Path, webc: &Path) -> Option<NamedPackageId> {
++    let rel = webc.strip_prefix(root).ok()?;
++    let parts = rel.iter().map(|p| p.to_str()).collect::<Option<Vec<_>>>()?;
 +    let (full_name, file) = match parts.as_slice() {
 +        [namespace, name, file] => (format!("{namespace}/{name}"), *file),
 +        [name, file] => (name.to_string(), *file),
-+        _ => return Ok(None),
++        _ => return None,
 +    };
-+    let Some(Ok(version)) = file.strip_suffix(".webc").map(str::parse) else {
-+        return Ok(None);
-+    };
-+    Ok(Some(ResolvedIdentity {
-+        id: PackageId::Named(NamedPackageId { full_name, version }),
-+        expected_sha256: read_sha256_sibling(webc),
-+    }))
++    let version = file.strip_suffix(".webc")?.parse().ok()?;
++    Some(NamedPackageId { full_name, version })
 +}
 +
-+/// The `<stem>.webcm` sidecar's metadata.
-+#[allow(dead_code)] // inactive scheme; swap into `add_one` to use.
-+#[derive(serde::Deserialize)]
-+struct Webcm {
-+    name: String,
-+    version: String,
-+    #[serde(rename = "package-hash")]
-+    package_hash: Option<String>,
-+}
-+
-+/// arshia's scheme: a `<stem>.webcm` TOML sidecar (name/version/hash) beside the
-+/// webc. `root` is unused. Absent gives `None`; malformed is an error.
-+#[allow(dead_code)] // inactive scheme; swap into `add_one` to use.
-+fn id_from_sidecar(_root: &Path, webc: &Path) -> Result<Option<ResolvedIdentity>, Error> {
-+    let sidecar = webc.with_extension("webcm");
-+    if !sidecar.is_file() {
-+        return Ok(None);
++/// Open one matched webc and build its summary. The layout's id (when given)
++/// wins over the manifest's; a `<stem>.sha256` sibling, if present, must match
++/// the content.
++fn load_summary(webc: &Path, id: Option<PackageId>) -> Result<PackageSummary, Error> {
++    let mut summary = PackageSummary::from_webc_file(webc)
++        .with_context(|| format!("Unable to load \"{}\"", webc.display()))?;
++    if let Some(expected) = read_sha256_sibling(webc) {
++        verify_sha256(webc, &summary.dist.webc_sha256, &expected)?;
 +    }
-+    let contents = std::fs::read_to_string(&sidecar)
-+        .with_context(|| format!("Unable to read \"{}\"", sidecar.display()))?;
-+    let webcm: Webcm = toml::from_str(&contents)
-+        .with_context(|| format!("Invalid webcm \"{}\"", sidecar.display()))?;
-+    Ok(Some(ResolvedIdentity {
-+        id: PackageId::Named(NamedPackageId {
-+            full_name: webcm.name,
-+            version: webcm.version.parse().context("Invalid webcm version")?,
-+        }),
-+        expected_sha256: webcm.package_hash,
-+    }))
++    if let Some(id) = id {
++        summary.pkg.id = id;
++    }
++    Ok(summary)
 +}
 +
 +/// The trimmed digest of an optional `<stem>.sha256` sibling, if present.
@@ -309,8 +337,8 @@ index c016c4df0cfe..0c396da23513 100644
 +    Some(contents.trim().to_string())
 +}
 +
-+/// Error if `actual` doesn't match `expected` (hex, an optional `sha256:` prefix
-+/// allowed).
++/// Error if `actual` doesn't match `expected` (hex, an optional `sha256:`
++/// prefix allowed).
 +fn verify_sha256(webc: &Path, actual: &WebcHash, expected: &str) -> Result<(), Error> {
 +    let expected = expected.trim();
 +    let expected = expected.strip_prefix("sha256:").unwrap_or(expected);
@@ -324,21 +352,170 @@ index c016c4df0cfe..0c396da23513 100644
 +    Ok(())
 +}
 +
- #[async_trait::async_trait]
- impl Source for InMemorySource {
-     #[tracing::instrument(level = "debug", skip_all, fields(%package))]
-@@ -212,6 +341,125 @@ mod tests {
-         "/../../wasmer-test-files/integration/webc/bash-1.0.16-f097441a-a80b-4e0d-87d7-684918ef4bb6.webc"
-     ));
- 
++#[cfg(test)]
++mod tests {
++    use tempfile::TempDir;
++
++    use super::*;
++
++    const COREUTILS_16: &[u8] = include_bytes!(concat!(
++        env!("CARGO_MANIFEST_DIR"),
++        "/../../wasmer-test-files/integration/webc/coreutils-1.0.16-e27dbb4f-2ef2-4b44-b46a-ddd86497c6d7.webc"
++    ));
++    const COREUTILS_11: &[u8] = include_bytes!(concat!(
++        env!("CARGO_MANIFEST_DIR"),
++        "/../../wasmer-test-files/integration/webc/coreutils-1.0.11-9d7746ca-694f-11ed-b932-dead3543c068.webc"
++    ));
++
++    fn registry(files: &[(&str, &[u8])]) -> TempDir {
++        let temp = TempDir::new().unwrap();
++        for (rel, bytes) in files {
++            let path = temp.path().join(rel);
++            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
++            std::fs::write(path, bytes).unwrap();
++        }
++        temp
++    }
++
++    fn named(id: &str, version: &str) -> PackageId {
++        PackageId::Named(NamedPackageId::try_new(id, version).unwrap())
++    }
++
++    #[test]
++    fn new_rejects_a_missing_directory() {
++        let temp = TempDir::new().unwrap();
++        assert!(LocalRegistrySource::new(temp.path().join("nope")).is_err());
++        assert!(LocalRegistrySource::new(temp.path()).is_ok());
++    }
++
++    #[tokio::test(flavor = "multi_thread")]
++    async fn named_query_ids_come_from_the_layout() {
++        // COREUTILS_16's manifest is "sharrattj/coreutils@1.0.16"; the layout
++        // must win, proving resolution keys off the path, not the artifact.
++        let temp = registry(&[("acme/cutils/9.9.9.webc", COREUTILS_16)]);
++        let source = LocalRegistrySource::new(temp.path()).unwrap();
++
++        let summaries = source.query(&"acme/cutils".parse().unwrap()).await.unwrap();
++
++        assert_eq!(summaries.len(), 1);
++        assert_eq!(summaries[0].pkg.id, named("acme/cutils", "9.9.9"));
++        // The metadata itself still comes from the webc.
++        assert!(!summaries[0].pkg.commands.is_empty());
++    }
++
++    #[tokio::test(flavor = "multi_thread")]
++    async fn only_matching_versions_are_opened() {
++        // 0.1.0 is garbage; a constraint that rules it out never reads it.
++        let temp = registry(&[
++            ("acme/cutils/0.1.0.webc", b"not a webc".as_slice()),
++            ("acme/cutils/9.9.9.webc", COREUTILS_16),
++        ]);
++        let source = LocalRegistrySource::new(temp.path()).unwrap();
++
++        let summaries = source
++            .query(&"acme/cutils@9.9.9".parse().unwrap())
++            .await
++            .unwrap();
++        assert_eq!(summaries[0].pkg.id, named("acme/cutils", "9.9.9"));
++
++        // ...while a constraint that pulls it in surfaces the corruption.
++        assert!(matches!(
++            source.query(&"acme/cutils".parse().unwrap()).await,
++            Err(QueryError::Other { .. })
++        ));
++    }
++
++    #[tokio::test(flavor = "multi_thread")]
++    async fn version_constraints_filter_the_listing() {
++        let temp = registry(&[
++            ("sharrattj/coreutils/1.0.11.webc", COREUTILS_11),
++            ("sharrattj/coreutils/1.0.16.webc", COREUTILS_16),
++        ]);
++        let source = LocalRegistrySource::new(temp.path()).unwrap();
++
++        let all = source
++            .query(&"sharrattj/coreutils".parse().unwrap())
++            .await
++            .unwrap();
++        assert_eq!(
++            all.iter().map(|s| s.pkg.id.clone()).collect::<Vec<_>>(),
++            [
++                named("sharrattj/coreutils", "1.0.11"),
++                named("sharrattj/coreutils", "1.0.16"),
++            ]
++        );
++
++        let pinned = source
++            .query(&"sharrattj/coreutils@^1.0.16".parse().unwrap())
++            .await
++            .unwrap();
++        assert_eq!(pinned.len(), 1);
++        assert_eq!(pinned[0].pkg.id, named("sharrattj/coreutils", "1.0.16"));
++
++        assert!(matches!(
++            source.query(&"sharrattj/unknown".parse().unwrap()).await,
++            Err(QueryError::NotFound { .. })
++        ));
++        assert!(matches!(
++            source
++                .query(&"sharrattj/coreutils@^2".parse().unwrap())
++                .await,
++            Err(QueryError::NoMatches { .. })
++        ));
++    }
++
++    #[tokio::test(flavor = "multi_thread")]
++    async fn unnamespaced_packages_sit_one_level_up() {
++        let temp = registry(&[("cutils/1.0.0.webc", COREUTILS_16)]);
++        let source = LocalRegistrySource::new(temp.path()).unwrap();
++
++        let summaries = source.query(&"cutils".parse().unwrap()).await.unwrap();
++
++        assert_eq!(summaries[0].pkg.id, named("cutils", "1.0.0"));
++    }
++
++    #[tokio::test(flavor = "multi_thread")]
++    async fn sha256_sidecar_is_verified() {
++        let temp = registry(&[("acme/cutils/9.9.9.webc", COREUTILS_16)]);
++        let sidecar = temp.path().join("acme/cutils/9.9.9.sha256");
++        let source = LocalRegistrySource::new(temp.path()).unwrap();
++        let query: PackageSource = "acme/cutils".parse().unwrap();
++
++        std::fs::write(&sidecar, WebcHash::sha256(COREUTILS_16).as_hex()).unwrap();
++        assert!(source.query(&query).await.is_ok());
++
++        std::fs::write(&sidecar, "deadbeef").unwrap();
++        assert!(matches!(
++            source.query(&query).await,
++            Err(QueryError::Other { .. })
++        ));
++    }
++
++    #[tokio::test(flavor = "multi_thread")]
++    async fn hash_queries_walk_the_tree() {
++        let temp = registry(&[
++            ("acme/cutils/9.9.9.webc", COREUTILS_16),
++            ("other/pkg/1.0.0.webc", COREUTILS_11),
++        ]);
++        let source = LocalRegistrySource::new(temp.path()).unwrap();
++        let hash = |bytes| PackageHash::from_sha256_bytes(WebcHash::sha256(bytes).as_bytes());
++        let query = |hash| PackageSource::Ident(PackageIdent::Hash(hash));
++
++        let summaries = source.query(&query(hash(COREUTILS_16))).await.unwrap();
++        assert_eq!(summaries[0].pkg.id, named("acme/cutils", "9.9.9"));
++
++        assert!(matches!(
++            source
++                .query(&query(PackageHash::from_sha256_bytes([0; 32])))
++                .await,
++            Err(QueryError::NotFound { .. })
++        ));
++    }
++
 +    #[test]
 +    fn parse_path_ids() {
 +        let root = Path::new("/pkgs");
-+        let id = |p: &str| {
-+            id_from_path(root, &root.join(p))
-+                .unwrap()
-+                .map(|ri| ri.id.to_string())
-+        };
++        let id = |p: &str| id_from_path(root, &root.join(p)).map(|id| id.to_string());
 +
 +        assert_eq!(id("ns/name/1.2.3.webc").as_deref(), Some("ns/name@1.2.3"));
 +        assert_eq!(id("name/1.2.3.webc").as_deref(), Some("name@1.2.3"));
@@ -346,110 +523,42 @@ index c016c4df0cfe..0c396da23513 100644
 +            id("ns/name/1.0.0-rc.1.webc").as_deref(),
 +            Some("ns/name@1.0.0-rc.1")
 +        );
-+        // doesn't fit the layout -> None, so the caller keeps the manifest id.
++        // Doesn't fit the layout -> None, so a walk keeps the manifest id.
 +        assert_eq!(id("ns/name/notaversion.webc"), None); // bad semver
 +        assert_eq!(id("too/deep/ns/name/1.0.0.webc"), None); // wrong depth
 +        assert_eq!(id("flat.webc"), None); // no version directory
 +    }
 +
 +    #[test]
-+    fn parse_filename_ids() {
-+        let id = |s: &str| {
-+            id_from_filename(Path::new(""), Path::new(s))
-+                .unwrap()
-+                .map(|ri| ri.id.to_string())
-+        };
-+
-+        assert_eq!(id("ns--name@1.2.3.webc").as_deref(), Some("ns/name@1.2.3"));
-+        assert_eq!(id("name@1.2.3.webc").as_deref(), Some("name@1.2.3"));
-+        assert_eq!(id("ns--name@notaversion.webc"), None); // bad semver
-+        assert_eq!(id(&format!("{}.webc", "a".repeat(64))), None); // hash-named
-+    }
-+
-+    #[test]
-+    fn add_packages_names_from_layout() {
-+        let temp = TempDir::new().unwrap();
-+        let dir = temp.path().join("acme").join("cutils");
-+        std::fs::create_dir_all(&dir).unwrap();
-+        // COREUTILS_16's manifest is "sharrattj/coreutils@1.0.16"; the layout
-+        // must win, proving resolution keys off the path, not the artifact.
-+        std::fs::write(dir.join("9.9.9.webc"), COREUTILS_16).unwrap();
-+
-+        let mut source = InMemorySource::new();
-+        source.add_packages(temp.path()).unwrap();
++    fn package_dirs_stay_under_the_root() {
++        let root = Path::new("/pkgs");
 +
 +        assert_eq!(
-+            source
-+                .named_packages
-+                .keys()
-+                .map(|k| k.as_str())
-+                .collect::<Vec<_>>(),
-+            ["acme/cutils"]
++            package_dir(root, "ns/name"),
++            Some(PathBuf::from("/pkgs/ns/name"))
 +        );
-+        assert_eq!(
-+            source.named_packages["acme/cutils"][0].ident,
-+            NamedPackageId::try_new("acme/cutils", "9.9.9").unwrap()
-+        );
++        assert_eq!(package_dir(root, "name"), Some(PathBuf::from("/pkgs/name")));
++        assert_eq!(package_dir(root, "ns/.."), None);
++        assert_eq!(package_dir(root, ""), None);
 +    }
-+
-+    #[test]
-+    fn add_packages_single_file_falls_back_to_manifest() {
-+        // A lone file has no layout, so the path scheme keeps its manifest id.
-+        let temp = TempDir::new().unwrap();
-+        let file = temp.path().join("anything.webc");
-+        std::fs::write(&file, COREUTILS_16).unwrap();
-+
-+        let mut source = InMemorySource::new();
-+        source.add_packages(&file).unwrap();
-+
-+        assert_eq!(
-+            source.named_packages["sharrattj/coreutils"][0].ident,
-+            NamedPackageId::try_new("sharrattj/coreutils", "1.0.16").unwrap()
-+        );
-+    }
-+
-+    #[test]
-+    fn add_packages_errors_on_missing_path() {
-+        let temp = TempDir::new().unwrap();
-+        let missing = temp.path().join("does-not-exist");
-+
-+        let mut source = InMemorySource::new();
-+        assert!(source.add_packages(&missing).is_err());
-+    }
-+
-+    #[test]
-+    fn add_packages_rejects_bad_sha256_sidecar() {
-+        let temp = TempDir::new().unwrap();
-+        let dir = temp.path().join("acme").join("cutils");
-+        std::fs::create_dir_all(&dir).unwrap();
-+        std::fs::write(dir.join("9.9.9.webc"), COREUTILS_16).unwrap();
-+        std::fs::write(dir.join("9.9.9.sha256"), "deadbeef").unwrap();
-+
-+        let mut source = InMemorySource::new();
-+        assert!(source.add_packages(temp.path()).is_err());
-+    }
-+
-+    #[test]
-+    fn sidecar_identity() {
-+        // add_one uses the path scheme, so test the sidecar scheme directly.
-+        let temp = TempDir::new().unwrap();
-+        let webc = temp.path().join("pkg.webc");
-+        std::fs::write(&webc, COREUTILS_16).unwrap();
-+        let hash = WebcHash::sha256(COREUTILS_16).as_hex();
-+        std::fs::write(
-+            temp.path().join("pkg.webcm"),
-+            format!("name = \"acme/cutils\"\nversion = \"9.9.9\"\npackage-hash = \"{hash}\"\n"),
-+        )
-+        .unwrap();
-+
-+        let identity = id_from_sidecar(temp.path(), &webc).unwrap().unwrap();
-+        assert_eq!(identity.id.to_string(), "acme/cutils@9.9.9");
-+
-+        let actual = WebcHash::sha256(COREUTILS_16);
-+        verify_sha256(&webc, &actual, identity.expected_sha256.as_deref().unwrap()).unwrap();
-+        assert!(verify_sha256(&webc, &actual, "deadbeef").is_err());
-+    }
-+
-     #[test]
-     fn load_a_directory_tree() {
-         let temp = TempDir::new().unwrap();
++}
+diff --git a/lib/wasix/src/runtime/resolver/mod.rs b/lib/wasix/src/runtime/resolver/mod.rs
+index f50f37c13e6..9cc31400bcb 100644
+--- a/lib/wasix/src/runtime/resolver/mod.rs
++++ b/lib/wasix/src/runtime/resolver/mod.rs
+@@ -2,6 +2,7 @@ mod backend_source;
+ mod filesystem_source;
+ mod in_memory_source;
+ mod inputs;
++mod local_registry_source;
+ mod multi_source;
+ mod outputs;
+ mod resolve;
+@@ -17,6 +18,7 @@ pub use self::{
+         Command, Dependency, DistributionInfo, FileSystemMapping, PackageInfo, PackageSummary,
+         WebcHash,
+     },
++    local_registry_source::LocalRegistrySource,
+     multi_source::{MultiSource, MultiSourceStrategy},
+     outputs::{
+         DependencyGraph, Edge, ItemLocation, Node, Resolution, ResolvedFileSystemMapping,
