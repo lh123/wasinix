@@ -136,7 +136,7 @@ def rewrite_wheel(src: Path, dest_dir: Path, rel: int) -> Path:
     return dest
 
 
-def wheel_anchor(fname: str, digest: str, md_digest: str, rp: str | None) -> str:
+def _wheel_attrs(md_digest: str, rp: str | None) -> str:
     attrs = ""
     if rp:
         attrs += f' data-requires-python="{html.escape(rp, quote=True)}"'
@@ -146,31 +146,305 @@ def wheel_anchor(fname: str, digest: str, md_digest: str, rp: str | None) -> str
         f' data-core-metadata="sha256={md_digest}"'
         f' data-dist-info-metadata="sha256={md_digest}"'
     )
-    return f'    <a href="{quote(fname)}#sha256={digest}"{attrs}>{fname}</a><br/>'
+    return attrs
 
 
-def landing() -> str:
-    # for humans; pip only ever sees simple/
-    return page(
-        "WASIX Python package index",
-        [
-            "    <p>pip install --index-url &lt;this url&gt;/simple &lt;package&gt;</p>",
-            '    <a href="simple/">simple/</a>',
-        ],
+# {name}-{version}-{python}-{abi}-{platform}.whl; version carries +wasix.N and,
+# being PEP 440, never contains a hyphen, so a plain split is safe.
+def _parse_wheel(fname: str) -> tuple[str, str]:
+    parts = fname[: -len(".whl")].split("-")
+    return parts[1], parts[-3]  # version, python tag
+
+
+def _ver_key(ver: str) -> tuple[int, ...]:
+    return tuple(int(n) for n in re.findall(r"\d+", ver))
+
+
+# cp313 -> "CPython 3.13", pp310 -> "PyPy 3.10", py3 -> "Python 3".
+def _py_label(tag: str) -> str:
+    m = re.fullmatch(r"(cp|pp)(\d)(\d+)", tag)
+    if m:
+        impl = {"cp": "CPython", "pp": "PyPy"}[m.group(1)]
+        return f"{impl} {m.group(2)}.{m.group(3)}"
+    if m := re.fullmatch(r"py(\d+)", tag):
+        return f"Python {m.group(1)}"
+    return tag
+
+
+def _fmt_size(n: int | None) -> str:
+    if not n:
+        return ""
+    size = float(n)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+
+
+def _sz(size: int | None) -> str:
+    s = _fmt_size(size)
+    return f' <span class="sz">{s}</span>' if s else ""
+
+
+_CSS = """
+      :root {
+        color-scheme: light dark;
+        --bg: #fbfbfd; --fg: #1c1c24; --muted: #70707e;
+        --accent: #5b54c9; --code-bg: #f1f1f6; --border: #e7e7ef;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #16161b; --fg: #e7e7ef; --muted: #9a9aa8;
+          --accent: #ab9dff; --code-bg: #22222b; --border: #2b2b35;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        background: var(--bg); color: var(--fg);
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        max-width: 44rem; margin: 0 auto; padding: 3.5rem 1.25rem 5rem;
+        line-height: 1.65;
+      }
+      h1 { font-size: 1.55rem; letter-spacing: -0.01em; margin: 0 0 .4rem; }
+      .lede { color: var(--muted); margin: 0; }
+      h2 {
+        font-size: .72rem; text-transform: uppercase; letter-spacing: .09em;
+        color: var(--muted); margin: 2.75rem 0 .85rem;
+        padding-bottom: .4rem; border-bottom: 1px solid var(--border);
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      pre {
+        background: var(--code-bg); border: 1px solid var(--border);
+        border-radius: .55rem; padding: .85rem 1.05rem; overflow-x: auto;
+        margin: 0; font-size: .88rem;
+      }
+      ul.pkgs {
+        list-style: none; padding: 0; margin: 0;
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+        gap: .05rem .9rem;
+      }
+      ul.pkgs a {
+        display: block; margin: 0 -.4rem; padding: .2rem .4rem; border-radius: .35rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem;
+      }
+      ul.pkgs a:hover { background: var(--code-bg); text-decoration: none; }
+      ul.pkgs li[hidden] { display: none; }
+      .filter {
+        width: 100%; font: inherit; font-size: .9rem; margin: 0 0 .9rem;
+        padding: .5rem .7rem; background: var(--bg); color: var(--fg);
+        border: 1px solid var(--border); border-radius: .5rem;
+      }
+      .filter::placeholder { color: var(--muted); }
+      .filter:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+      .empty { color: var(--muted); font-size: .9rem; margin: .3rem 0 0; }
+      .crumb { margin: 0 0 1.4rem; font-size: .85rem; }
+      .rel { margin: 1.5rem 0; }
+      .rel .v {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .95rem;
+      }
+      ul.whls {
+        display: flex; flex-wrap: wrap; gap: .4rem;
+        margin: .5rem 0 0; padding: 0; list-style: none;
+      }
+      ul.whls a {
+        display: inline-block; padding: .25rem .6rem; font-size: .8rem;
+        border: 1px solid var(--border); border-radius: .4rem; background: var(--code-bg);
+      }
+      ul.whls a:hover { border-color: var(--accent); text-decoration: none; }
+      ul.whls .sz { margin-left: .35rem; color: var(--muted); }
+      .rel .rev { margin-left: .55rem; font-size: .8rem; color: var(--muted); }
+      .rel .rev:hover { color: var(--accent); }
+      .rel .date { margin-left: .55rem; font-size: .8rem; color: var(--muted); }
+      .repro { display: flex; gap: .4rem; margin: .55rem 0 0; }
+      .repro code {
+        flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap;
+        background: var(--code-bg); border: 1px solid var(--border);
+        border-radius: .4rem; padding: .4rem .6rem; font-size: .8rem;
+      }
+      .copy {
+        flex: none; font: inherit; font-size: .78rem; cursor: pointer; color: var(--fg);
+        background: var(--code-bg); border: 1px solid var(--border);
+        border-radius: .4rem; padding: .4rem .7rem;
+      }
+      .copy:hover { border-color: var(--accent); }
+      .copy.copied { color: var(--accent); border-color: var(--accent); }
+      .note { color: var(--muted); font-size: .85rem; margin-top: 3rem; }
+"""
+
+
+# Inline, as a plain string so its braces aren't f-string substitutions: fill
+# the pip index URL from the page's own location, and live-filter the package
+# grid (graceful with JS off -- the input is inert and every package shows).
+_SCRIPT = """
+      document.getElementById("url").textContent = new URL("simple/", location.href).href;
+      (function () {
+        var q = document.getElementById("filter");
+        var items = Array.prototype.slice.call(document.querySelectorAll("ul.pkgs li"));
+        var head = document.getElementById("pkgs-h");
+        var empty = document.getElementById("empty");
+        var total = items.length;
+        q.addEventListener("input", function () {
+          var v = q.value.trim().toLowerCase();
+          var n = 0;
+          items.forEach(function (li) {
+            var match = li.textContent.toLowerCase().indexOf(v) !== -1;
+            li.hidden = !match;
+            if (match) n++;
+          });
+          head.textContent = v
+            ? n + " of " + total + " packages"
+            : total + (total === 1 ? " package" : " packages");
+          empty.hidden = n !== 0;
+        });
+      })();
+"""
+
+
+# Project page: fill the pip index URL from the page's location, and wire the
+# per-release "copy reproduce command" buttons (no-op with JS off).
+_PROJECT_SCRIPT = """
+      document.getElementById("url").textContent = new URL("../", location.href).href;
+      document.querySelectorAll(".copy").forEach(function (b) {
+        b.addEventListener("click", function () {
+          navigator.clipboard.writeText(b.previousElementSibling.textContent).then(function () {
+            b.textContent = "Copied";
+            b.classList.add("copied");
+            setTimeout(function () {
+              b.textContent = "Copy";
+              b.classList.remove("copied");
+            }, 1200);
+          });
+        });
+      });
+"""
+
+
+def landing(projects) -> str:
+    """Human-facing entry page (pip only ever sees simple/)."""
+    names = sorted(projects)
+    items = "\n".join(
+        f'      <li><a href="simple/{quote(p)}/">{html.escape(p)}</a></li>'
+        for p in names
     )
+    n = len(names)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>WASIX Python package index</title>
+    <style>{_CSS}    </style>
+  </head>
+  <body>
+    <h1>WASIX Python package index</h1>
+    <p class="lede">Python wheels cross-compiled to WASIX (<code>wasm32-wasix</code>):
+      prebuilt native extensions that run under <a href="https://wasmer.io/">Wasmer</a>,
+      so <code>pip install</code> works where it otherwise could not.</p>
+
+    <h2>Install</h2>
+    <pre><code>pip install --index-url <span id="url">&lt;this page&gt;/simple/</span> &lt;package&gt;</code></pre>
+
+    <h2 id="pkgs-h">{n} package{"" if n == 1 else "s"}</h2>
+    <input class="filter" id="filter" type="search" placeholder="Filter packages&hellip;"
+      aria-label="Filter packages" autocomplete="off" spellcheck="false"/>
+    <ul class="pkgs">
+{items}
+    </ul>
+    <p class="empty" id="empty" hidden>No packages match.</p>
+
+    <p class="note">Each wheel is republished as <code>&lt;version&gt;+wasix.&lt;N&gt;</code>
+      (the Nth WASIX build of that version). Raw index: <a href="simple/">simple/</a>.</p>
+
+    <script>{_SCRIPT}    </script>
+  </body>
+</html>
+"""
 
 
 def page(title: str, anchors: list[str]) -> str:
     lines = "\n".join(anchors)
     return f"""<!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <meta name="pypi:repository-version" content="1.1"/>
     <title>{html.escape(title)}</title>
+    <style>{_CSS}    </style>
   </head>
   <body>
     <h1>{html.escape(title)}</h1>
 {lines}
+  </body>
+</html>
+"""
+
+
+_REPO = "https://github.com/wasix-org/wasinix"
+
+
+def project_page(project: str, files: list[tuple]) -> str:
+    """Human-friendly file list for one project, grouped by version.
+
+    files: (filename, sha256, metadata_sha256, requires_python, wasinix_rev,
+    attr, size, published). Resolvers read only the <a> href and data-*
+    attributes; the surrounding markup is ignored, so this stays PEP 503
+    compliant. rev/attr/published are None for the pre-publish nix build, which
+    just drops the provenance line.
+    """
+    by_ver: dict[str, list] = {}
+    meta: dict[str, tuple] = {}
+    for fname, digest, md_digest, rp, rev, attr, size, published in files:
+        ver, py = _parse_wheel(fname)
+        by_ver.setdefault(ver, []).append((fname, digest, md_digest, rp, py, size))
+        meta[ver] = (rev, attr, published)  # a release's wheels share one build
+    rels = []
+    for ver in sorted(by_ver, key=_ver_key, reverse=True):
+        chips = "\n".join(
+            f'        <li><a href="{quote(fname)}#sha256={digest}"'
+            f'{_wheel_attrs(md_digest, rp)} title="{html.escape(fname, quote=True)}">'
+            f"{html.escape(_py_label(py))}{_sz(size)}</a></li>"
+            for fname, digest, md_digest, rp, py, size in sorted(by_ver[ver])
+        )
+        rev, attr, published = meta[ver]
+        extras = repro = ""
+        if rev and attr:
+            r = html.escape(rev, quote=True)
+            extras += (
+                f' <a class="rev" href="{_REPO}/commit/{r}"'
+                f' title="wasinix commit {r}">{html.escape(rev[:7])}</a>'
+            )
+            cmd = f"nix build 'github:wasix-org/wasinix/{rev}#{attr}'"
+            repro = (
+                f'\n      <div class="repro"><code>{html.escape(cmd)}</code>'
+                f'<button class="copy" type="button" aria-label="Copy reproduce command">Copy</button></div>'
+            )
+        if published:
+            extras += f' <span class="date">{html.escape(published)}</span>'
+        rels.append(
+            f'    <div class="rel">\n'
+            f'      <div class="v">{html.escape(ver)}{extras}</div>\n'
+            f'      <ul class="whls">\n{chips}\n      </ul>{repro}\n'
+            f"    </div>"
+        )
+    body = "\n".join(rels)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <meta name="pypi:repository-version" content="1.1"/>
+    <title>{html.escape(project)} &middot; WASIX Python index</title>
+    <style>{_CSS}    </style>
+  </head>
+  <body>
+    <p class="crumb"><a href="../">&larr; all packages</a></p>
+    <h1>{html.escape(project)}</h1>
+    <pre><code>pip install --index-url <span id="url">&lt;this index&gt;/</span> {html.escape(project)}</code></pre>
+{body}
+    <script>{_PROJECT_SCRIPT}    </script>
   </body>
 </html>
 """
@@ -207,21 +481,32 @@ def main() -> None:
     for project, wheels in sorted(projects.items()):
         pdir = out / "simple" / project
         pdir.mkdir(parents=True)
-        anchors = []
+        files = []
         for fname, src in sorted(wheels.items()):
             shutil.copy(src, pdir / fname)
             metadata = wheel_metadata(src)
             (pdir / f"{fname}.metadata").write_bytes(metadata)
             md_digest = hashlib.sha256(metadata).hexdigest()
             digest = hashlib.sha256(src.read_bytes()).hexdigest()
-            anchors.append(
-                wheel_anchor(fname, digest, md_digest, requires_python(metadata))
+            # rev/attr/published are publish-time facts (publish.py fills them
+            # from the manifest); size is intrinsic, so shown here already.
+            files.append(
+                (
+                    fname,
+                    digest,
+                    md_digest,
+                    requires_python(metadata),
+                    None,
+                    None,
+                    src.stat().st_size,
+                    None,
+                )
             )
-        (pdir / "index.html").write_text(page(f"Links for {project}", anchors))
+        (pdir / "index.html").write_text(project_page(project, files))
 
     root = [f'    <a href="{p}/">{p}</a><br/>' for p in sorted(projects)]
     (out / "simple" / "index.html").write_text(page("Simple index", root))
-    (out / "index.html").write_text(landing())
+    (out / "index.html").write_text(landing(projects))
     (out / "provenance.json").write_text(
         json.dumps(provenance, indent=2, sort_keys=True) + "\n"
     )

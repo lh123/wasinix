@@ -10,6 +10,7 @@ bump, and nothing is ever deleted, so old lockfiles keep resolving.
 Volume layout (= the web root served by the app):
   index.html, simple/...     as in the nix output
   manifests/<wheel>.json     {project, sha256, metadata_sha256, requires_python,
+                              size, published (UTC date, frozen at first publish),
                               + provenance: attr, drv_path, wasinix_rev}
 The manifests carry what HTML regeneration needs, so republishing never
 downloads a wheel. Provenance lets `nix build
@@ -28,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 _spec = importlib.util.spec_from_file_location(
@@ -82,6 +84,8 @@ def main():
         for p in published_dir.glob("*.json")
     }
 
+    # stamped once at first publish, then frozen in the immutable manifest
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     staging = tmp / "staging"
     conflicts, new = [], []
     manifests = dict(published)
@@ -99,6 +103,8 @@ def main():
             "sha256": sha,
             "metadata_sha256": hashlib.sha256(metadata).hexdigest(),
             "requires_python": make_index.requires_python(metadata),
+            "size": whl.stat().st_size,
+            "published": today,
             **prov.get(whl.name, {}),
         }
         if args.rev:
@@ -127,20 +133,25 @@ def main():
     for project, wheels in sorted(projects.items()):
         pdir = staging / "simple" / project
         pdir.mkdir(parents=True, exist_ok=True)
-        anchors = [
-            make_index.wheel_anchor(
-                f, m["sha256"], m["metadata_sha256"], m["requires_python"]
+        files = [
+            (
+                f,
+                m["sha256"],
+                m["metadata_sha256"],
+                m["requires_python"],
+                m.get("wasinix_rev"),
+                m.get("attr"),
+                m.get("size"),
+                m.get("published"),
             )
             for f, m in sorted(wheels.items())
         ]
-        (pdir / "index.html").write_text(
-            make_index.page(f"Links for {project}", anchors)
-        )
+        (pdir / "index.html").write_text(make_index.project_page(project, files))
     root = [f'    <a href="{p}/">{p}</a><br/>' for p in sorted(projects)]
     (staging / "simple" / "index.html").write_text(
         make_index.page("Simple index", root)
     )
-    (staging / "index.html").write_text(make_index.landing())
+    (staging / "index.html").write_text(make_index.landing(projects))
 
     print(
         f"publishing {len(new)} new wheels "
