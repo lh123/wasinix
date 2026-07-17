@@ -35,6 +35,12 @@ fi
 # "local", not "notBuilt"); they are pushed after the build. JOBS_FILE reuses
 # the eval from the rebuild-diff step (scripts/eval-diff.py) instead of
 # evaling a second time.
+# Eval parallelism. One worker per core is right on a dedicated runner, but
+# every worker registers drvs through the one nix-daemon: on a shared builder
+# the bottleneck is daemon/SQLite contention, not CPU, so callers there set a
+# small EVAL_WORKERS (ci-build-remote.sh).
+EVAL_WORKERS="${EVAL_WORKERS:-$(nproc)}"
+
 PUSH_DRVS=""
 if [ -n "${NIX_SIGNING_KEY:-}" ]; then
   if [ -n "${JOBS_FILE:-}" ] && [ -s "$JOBS_FILE" ]; then
@@ -44,7 +50,7 @@ if [ -n "${NIX_SIGNING_KEY:-}" ]; then
       nix-eval-jobs \
         --flake "$CI_ATTR" \
         --check-cache-status \
-        --workers "$(nproc)" \
+        --workers "$EVAL_WORKERS" \
         --option accept-flake-config true 2>/dev/null |
         jq -r '.neededBuilds[]?' | sort -u
     )
@@ -60,6 +66,7 @@ nix-fast-build \
   --retries 3 \
   --no-nom \
   --no-link \
+  --eval-workers "$EVAL_WORKERS" \
   --result-file "$RESULT_FILE" \
   --result-format junit \
   --option accept-flake-config true \
