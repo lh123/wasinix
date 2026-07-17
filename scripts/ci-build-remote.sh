@@ -90,10 +90,12 @@ if [ "$push" -eq 1 ]; then
   runner="doppler run -p nix-builder -c prd --"
 fi
 
-# nix flake metadata (unlike archive) copies only the flake's own tree into
-# the store, not the input closure; the remote fetches inputs itself, which
-# beats pushing ~750 MiB of nixpkgs+wasmer sources through a home uplink.
-src=$(nix flake metadata --json | jq -r .path)
+# nix flake prefetch materializes only the flake's own tree in the store,
+# not the input closure; the remote fetches inputs itself, which beats
+# pushing ~750 MiB of nixpkgs+wasmer sources through a home uplink. Not
+# `metadata`: with lazy trees (nix 2.35) its .path names a store path that
+# was never actually added, and the copy below fails on it.
+src=$(nix flake prefetch --json | jq -r .storePath)
 echo "Copying flake source ($src) to $remote..."
 nix copy --to "ssh://$remote" "$src"
 

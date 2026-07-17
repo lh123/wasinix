@@ -42,7 +42,9 @@ if [ -n "${NIX_SIGNING_KEY:-}" ]; then
   else
     PUSH_DRVS=$(
       nix-eval-jobs \
-        --flake "$CI_ATTR" --check-cache-status --workers "$(nproc)" \
+        --flake "$CI_ATTR" \
+        --check-cache-status \
+        --workers "$(nproc)" \
         --option accept-flake-config true 2>/dev/null |
         jq -r '.neededBuilds[]?' | sort -u
     )
