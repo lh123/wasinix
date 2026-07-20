@@ -41,6 +41,12 @@ _wasixApplyCratePatches() { # <vendor>
       [[ $ver =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]] || continue
       pf=$(_wasixSelectPatch "$crate" "$ver")
       [ -n "$pf" ] || continue
+      # A hunkless patch is a sentinel: the crate builds stock at this version
+      # (upstreamed fix), overriding a lower floor patch. See README.md.
+      if ! grep -q '^@@ ' "$pf"; then
+        echo "wasix: $base stock ($(basename "$pf") sentinel)"
+        continue
+      fi
       echo "wasix: $base <- $(basename "$pf")"
       patch -p1 -d "$vd" --no-backup-if-mismatch <"$pf" || {
         echo "wasix: $(basename "$pf") did not apply to $base; add a matching <version>.patch" >&2

@@ -231,6 +231,7 @@
     pyImport = "pydantic_core";
   } # overlay/python-packages/pydantic-core.nix (maturin fork + getrandom + extension-module)
   {attr = "cryptography";} # overlay/python-packages/cryptography.nix (maturin + openssl + target-lexicon dl)
+  {attr = "primp";} # overlay/python-packages/primp.nix (maturin; rquest/aws-lc-rs browser-impersonation HTTP client)
   {attr = "orjson";} # overlay/python-packages/orjson.nix (maturin + target-lexicon dl)
   {attr = "ddtrace";} # overlay/python-packages/ddtrace/package.nix (cython/C + IAST cmake + rust _native + bundled libddwaf)
 

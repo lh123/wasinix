@@ -1,0 +1,12 @@
+diff -ruN '--exclude=.cargo-checksum.json' '--exclude=Cargo.lock' a/src/sys/unix/net.rs b/src/sys/unix/net.rs
+--- a/src/sys/unix/net.rs	2006-07-24 03:21:28.000000000 +0200
++++ b/src/sys/unix/net.rs	2026-07-20 14:37:22.370996249 +0200
+@@ -112,7 +112,7 @@
+                 sin_family: libc::AF_INET as libc::sa_family_t,
+                 sin_port: addr.port().to_be(),
+                 sin_addr,
+-                #[cfg(not(any(target_os = "haiku", target_os = "vita", target_os = "wasi")))]
++                #[cfg(not(any(target_os = "haiku", target_os = "vita")))]
+                 sin_zero: [0; 8],
+                 #[cfg(target_os = "haiku")]
+                 sin_zero: [0; 24],

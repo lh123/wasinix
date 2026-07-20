@@ -21,6 +21,11 @@ For a vendored `<crate>-<V>`, the highest patch version `<= V` is applied; a pat
 at `X` covers `[X, next-patch)`. When upstream moves out from under it the build
 fails loud -- add a new `<V>.patch`. Versions below the lowest patch are stock.
 
+A `<V>.patch` with no diff hunks (comment only) is a sentinel: it declares the
+crate stock at `>= V` (upstream landed the fix) and overrides a lower floor
+patch, which otherwise would apply and fail. Use it when a newer version than
+an existing patch needs no change.
+
 ## Authoring
 
 Export the delta from the crate's `wasix-*` fork branch, relative to the crate
