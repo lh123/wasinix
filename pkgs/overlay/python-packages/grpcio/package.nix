@@ -9,7 +9,7 @@
   helpers,
   ...
 }: let
-  wheels = import ./lib/wheels.nix {inherit lib;};
+  wheels = import ../lib/wheels.nix {inherit lib;};
 in
   wheels.onlyOnWasix pyprev.grpcio (
     helpers.libTweaks (

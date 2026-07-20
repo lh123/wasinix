@@ -18,7 +18,7 @@
   helpers,
   ...
 }: let
-  wheels = import ./lib/wheels.nix {inherit lib;};
+  wheels = import ../lib/wheels.nix {inherit lib;};
   py = wasixPython;
   crossNumpyInc = "${py.pkgs.numpy}/lib/${py.libPrefix}/site-packages/numpy/_core/include";
 in

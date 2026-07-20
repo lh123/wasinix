@@ -7,7 +7,7 @@
   helpers,
   ...
 }: let
-  wheels = import ./lib/wheels.nix {inherit lib;};
+  wheels = import ../lib/wheels.nix {inherit lib;};
 in
   # wasm build only: switch_wasm32_wasix.h includes wasix/context.h, so it can't compile natively.
   wheels.onlyOnWasix pyprev.greenlet (
