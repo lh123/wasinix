@@ -38,6 +38,9 @@ class Package:
     dependencies: dict[str, str]
     # [package.metadata] wasix-rel (source-manifest plumbing, WASIX-TODO.md)
     rel: int
+    # [package.metadata] wasix-source: repo-relative "path:line" of the
+    # package definition, for the published README's pinned source link
+    source: str | None
 
 
 @dataclass(frozen=True)
@@ -147,13 +150,16 @@ def read_packages(pkg_roots: list[Path]) -> dict[str, Package]:
                     f"Duplicate package name {full_name} in {toml_path} and {packages[full_name].path / 'wasmer.toml'}"
                 )
 
-            rel = package.get("metadata", {}).get("wasix-rel")
+            metadata = package.get("metadata", {})
+            rel = metadata.get("wasix-rel")
+            source = metadata.get("wasix-source")
             packages[full_name] = Package(
                 full_name=full_name,
                 version=version,
                 path=pkg_dir,
                 dependencies=dependencies,
                 rel=rel if isinstance(rel, int) else 1,
+                source=source if isinstance(source, str) else None,
             )
 
     if not packages:
@@ -321,8 +327,9 @@ def get_published_package_version(
 
 # The appended block is a pure function of (package dir, rev), so a later run
 # reproduces the published bytes by restaging its local build with the
-# recorded rev; keep it byte-stable or existing-version checks break.
-REV_RE = re.compile(r"^- wasinix-rev: (\S+)$", re.M)
+# recorded rev; keep it byte-stable or existing-version checks break. The
+# rebuild command doubles as the machine-readable rev record.
+REV_RE = re.compile(r"^    nix build 'github:wasix-org/wasinix/([^#']+)#", re.M)
 
 
 def recorded_rev(readme: str | None) -> str | None:
@@ -338,11 +345,19 @@ def stage_with_provenance(pkg: Package, rev: str, tmpdir: str) -> Path:
     for p in dst.rglob("*"):
         p.chmod(p.stat().st_mode | 0o200)
     name = pkg.full_name.split("/", 1)[1]
+    if pkg.source:
+        src_file, _, src_line = pkg.source.rpartition(":")
+        origin = (
+            f"Built from [{src_file}]"
+            f"(https://github.com/wasix-org/wasinix/blob/{rev}/{src_file}#L{src_line})"
+        )
+    else:
+        origin = "Built by [wasinix](https://github.com/wasix-org/wasinix)"
     with (dst / "README.md").open("a") as f:
         f.write(
-            f"- wasinix-rev: {rev}\n"
-            f"- rebuild: `nix build github:wasix-org/wasinix/{rev}"
-            f'#wasmerPackages."{name}".webc`\n'
+            f"\n{origin}\nat `{rev[:12]}`; rebuild with\n\n"
+            f"    nix build 'github:wasix-org/wasinix/{rev}"
+            f'#wasmerPackages."{name}".webc\'\n'
         )
     return dst
 

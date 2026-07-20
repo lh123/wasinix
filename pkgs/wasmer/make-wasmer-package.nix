@@ -88,7 +88,38 @@
   commands = w.commands or null;
   commandEnv = w.commandEnv or {};
   defaultRunner = w.defaultRunner or "https://webc.org/runner/wasi";
-  metadata = {wasix-rel = rel;} // (w.metadata or {});
+  # meta.position points into the store source copy; repo-relative "path:line"
+  # for the publish-time source link
+  sourceRef = let
+    m =
+      if packagePos == null
+      then null
+      else builtins.match "^/nix/store/[^/]+/(.*)$" packagePos.file;
+  in
+    if m == null
+    then null
+    else "${builtins.head m}:${toString packagePos.line}";
+  homepage = let
+    h = (package.meta or {}).homepage or null;
+  in
+    if builtins.isString h
+    then h
+    else null;
+
+  metadata =
+    {wasix-rel = rel;}
+    // lib.optionalAttrs (sourceRef != null) {wasix-source = sourceRef;}
+    // (w.metadata or {});
+
+  # registry-visible package page; the publish step appends the pinned source
+  # link, rev, and rebuild command
+  readme =
+    lib.concatStringsSep "\n" (
+      ["# ${name}" "" description]
+      ++ lib.optionals (homepage != null) ["" "Upstream: <${homepage}>"]
+      ++ lib.optionals (rel > 1) ["" "Build ${toString rel} of this version."]
+    )
+    + "\n";
   fs = w.fs or {};
   selfMounts = w.selfMounts or [];
   autoSelfMount = w.autoSelfMount or false;
@@ -177,6 +208,8 @@ in
   pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
     name = "wasmer-package-${name}";
     pos = packagePos;
+    inherit readme;
+    passAsFile = ["readme"];
     passthru = {
       id = {inherit owner name version baseVersion;};
       inherit depWebcs;
@@ -242,20 +275,7 @@ in
       public = true
       EOF
 
-        # registry-visible provenance (rendered on the package page); the
-        # publish step appends the source rev and the pre-publish webc hash
-        cat > "$pkg_dir/README.md" <<'EOF'
-      # ${name}
-
-      ${description}
-
-      Built from source by [wasinix](https://github.com/wasix-org/wasinix).
-
-      ## Provenance
-
-      - attr: wasmerPackages."${name}".webc
-      - rel: ${toString rel}
-      EOF
+        cp "$readmePath" "$pkg_dir/README.md"
 
         ${
         if metadata == {}
