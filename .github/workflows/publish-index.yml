@@ -30,13 +30,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
-    # A single wasmer namespace token; the job fetches the volume's S3
-    # credentials at runtime (provisioning them on the first run). Job-level so
-    # the publish step's condition can see whether it is configured.
     env:
-      # tokens are per-registry: WASMER_TOKEN for wasmer.io, WASMER_TOKEN_DEV
-      # for wasmer.wtf (dev); derived so the pair cannot drift
-      WASMER_TOKEN: ${{ contains(env.WASMER_REGISTRY, 'wasmer.wtf') && secrets.WASMER_TOKEN_DEV || secrets.WASMER_TOKEN }}
       # the app itself is resolved from pkgs/python-registry/app.yaml (app_id)
       INDEX_VOLUME: python-index
     steps:
@@ -45,6 +39,21 @@ jobs:
         with:
           # workflow_run does not check out the triggering commit by default
           ref: ${{ github.event.workflow_run.head_sha }}
+
+      # A single wasmer namespace token; the job fetches the volume's S3
+      # credentials at runtime (provisioning them on the first run). Tokens
+      # are per-registry: WASMER_TOKEN for wasmer.io, WASMER_TOKEN_DEV for
+      # wasmer.wtf (dev), derived from WASMER_REGISTRY so the pair cannot
+      # drift (GH expressions cannot read `env` in job-level env). Via
+      # GITHUB_ENV so the publish step's condition sees whether it is set.
+      - name: Select registry token
+        env:
+          TOKEN_PROD: ${{ secrets.WASMER_TOKEN }}
+          TOKEN_DEV: ${{ secrets.WASMER_TOKEN_DEV }}
+        run: |
+          token="$TOKEN_PROD"
+          case "$WASMER_REGISTRY" in *wasmer.wtf*) token="$TOKEN_DEV" ;; esac
+          echo "WASMER_TOKEN=$token" >>"$GITHUB_ENV"
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31.9.1
