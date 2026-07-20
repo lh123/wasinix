@@ -145,6 +145,7 @@ def main():
                 m.get("attr"),
                 m.get("size"),
                 m.get("published"),
+                m.get("source"),
             )
             for f, m in sorted(wheels.items())
         ]

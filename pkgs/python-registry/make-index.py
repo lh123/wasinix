@@ -261,6 +261,8 @@ _CSS = """
       .rel .rev { margin-left: .55rem; font-size: .8rem; color: var(--muted); }
       .rel .rev:hover { color: var(--accent); }
       .rel .date { margin-left: .55rem; font-size: .8rem; color: var(--muted); }
+      .src { margin: .55rem 0 0; font-size: .8rem; color: var(--muted); }
+      .src a:hover { color: var(--accent); }
       .repro { display: flex; gap: .4rem; margin: .55rem 0 0; }
       .repro code {
         flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap;
@@ -395,17 +397,18 @@ def project_page(project: str, files: list[tuple]) -> str:
     """Human-friendly file list for one project, grouped by version.
 
     files: (filename, sha256, metadata_sha256, requires_python, wasinix_rev,
-    attr, size, published). Resolvers read only the <a> href and data-*
+    attr, size, published, source). Resolvers read only the <a> href and data-*
     attributes; the surrounding markup is ignored, so this stays PEP 503
-    compliant. rev/attr/published are None for the pre-publish nix build, which
-    just drops the provenance line.
+    compliant. rev/attr/published/source are None for the pre-publish nix
+    build, which just drops the provenance line.
     """
     by_ver: dict[str, list] = {}
     meta: dict[str, tuple] = {}
-    for fname, digest, md_digest, rp, rev, attr, size, published in files:
+    for fname, digest, md_digest, rp, rev, attr, size, published, source in files:
         ver, py = _parse_wheel(fname)
         by_ver.setdefault(ver, []).append((fname, digest, md_digest, rp, py, size))
-        meta[ver] = (rev, attr, published)  # a release's wheels share one build
+        # a release's wheels share one build
+        meta[ver] = (rev, attr, published, source)
     rels = []
     for ver in sorted(by_ver, key=_ver_key, reverse=True):
         chips = "\n".join(
@@ -414,7 +417,7 @@ def project_page(project: str, files: list[tuple]) -> str:
             f"{html.escape(_py_label(py))}{_sz(size)}</a></li>"
             for fname, digest, md_digest, rp, py, size in sorted(by_ver[ver])
         )
-        rev, attr, published = meta[ver]
+        rev, attr, published, source = meta[ver]
         extras = repro = ""
         if rev and attr:
             r = html.escape(rev, quote=True)
@@ -423,7 +426,15 @@ def project_page(project: str, files: list[tuple]) -> str:
                 f' title="wasinix commit {r}">{html.escape(rev[:7])}</a>'
             )
             cmd = f"nix build 'github:wasix-org/wasinix/{rev}#{attr}'"
-            repro = (
+            src = ""
+            if source:
+                sfile, _, sline = source.rpartition(":")
+                sref = f"{_REPO}/blob/{r}/{quote(sfile)}#L{html.escape(sline)}"
+                src = (
+                    f'\n      <div class="src">built from <a href="{sref}">'
+                    f"{html.escape(sfile)}:{html.escape(sline)}</a></div>"
+                )
+            repro = src + (
                 f'\n      <div class="repro"><code>{html.escape(cmd)}</code>'
                 f'<button class="copy" type="button" aria-label="Copy reproduce command">Copy</button></div>'
             )
@@ -483,6 +494,7 @@ def main() -> None:
                 "name": entry["name"],
                 "attr": entry["attr"],
                 "drv_path": entry["drvPath"],
+                **({"source": entry["source"]} if entry.get("source") else {}),
             }
 
     for project, wheels in sorted(projects.items()):
@@ -495,8 +507,9 @@ def main() -> None:
             (pdir / f"{fname}.metadata").write_bytes(metadata)
             md_digest = hashlib.sha256(metadata).hexdigest()
             digest = hashlib.sha256(src.read_bytes()).hexdigest()
-            # rev/attr/published are publish-time facts (publish.py fills them
-            # from the manifest); size is intrinsic, so shown here already.
+            # rev/attr/published/source are publish-time facts (publish.py
+            # fills them from the manifest); size is intrinsic, so shown here
+            # already.
             files.append(
                 (
                     fname,
@@ -506,6 +519,7 @@ def main() -> None:
                     None,
                     None,
                     src.stat().st_size,
+                    None,
                     None,
                 )
             )

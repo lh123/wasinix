@@ -24,6 +24,21 @@
   rels = builtins.fromJSON (builtins.readFile ../../rels.json);
   relPrefix = "pythonRegistry.wheels.";
 
+  # Repo-relative "path:line" of the package definition, for the index's
+  # publish-time source link. Only for positions in this repo: closure wheels
+  # defined in nixpkgs would produce dead links.
+  repoRoot = toString ../.. + "/";
+  sourceOf = drv: let
+    pos = drv.meta.position or null;
+    m =
+      if pos == null
+      then null
+      else builtins.match "(.*):([0-9]+)" pos;
+  in
+    if m != null && lib.hasPrefix repoRoot (builtins.head m)
+    then "${lib.removePrefix repoRoot (builtins.head m)}:${builtins.elemAt m 1}"
+    else null;
+
   # Per-version served wheels (full runtime closure, not just the worklist). buildPythonPackage puts
   # the .whl in `dist`; toPythonModule-wrapped non-python drvs have none and can't be served.
   servedOf = pv: set: let
@@ -38,6 +53,7 @@
       # `nix build github:wasix-org/wasinix/<rev>#${attr}` rebuilds it.
       attr = "pythonRegistry.wheels.${pv}.${name}^dist";
       drvPath = builtins.unsafeDiscardStringContext drv.drvPath;
+      source = sourceOf drv;
       inherit drv;
     })
     (lib.filter (drv: drv ? dist) closure);
