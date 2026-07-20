@@ -4,6 +4,7 @@
 # already have. Run from the repo root (`nix run .#scripts.publish-webc`).
 # Packages publish in dependency order; a webc [dependencies] edge to a
 # package that is neither published nor part of the run is an error.
+# Failures are isolated per package and reported at the end (exit 1).
 
 import argparse
 import hashlib
@@ -22,6 +23,10 @@ try:
     import tomllib
 except ModuleNotFoundError as exc:
     raise SystemExit("Python 3.11+ is required (missing tomllib).") from exc
+
+
+class PackageError(Exception):
+    """Per-package publish failure: recorded, the run continues."""
 
 
 @dataclass(frozen=True)
@@ -208,8 +213,8 @@ def build_webc_sha256(pkg_dir: Path, pkg: Package) -> str:
             cwd=pkg_dir,
         )
         if not out.is_file():
-            raise SystemExit(
-                f"Expected local .webc output missing for {pkg.full_name}@{pkg.version}: {out}"
+            raise PackageError(
+                f"expected local .webc output missing for {pkg.full_name}@{pkg.version}: {out}"
             )
         return sha256_file(out)
 
@@ -357,14 +362,14 @@ def verify_published(graphql_url: str, pkg: Package, expected_sha: str) -> None:
             break
         time.sleep(5)
     if info is None or not info.exists:
-        raise SystemExit(
-            f"wasmer publish reported success for {pkg.full_name}@{pkg.version}, "
-            "but the version is not visible in the registry (silent no-op?)"
+        raise PackageError(
+            "wasmer publish reported success, but the version is not visible "
+            "in the registry (silent no-op?)"
         )
     if info.webc_sha256 is not None and info.webc_sha256 != expected_sha:
-        raise SystemExit(
-            f"Published {pkg.full_name}@{pkg.version} but the registry stored "
-            f"different content: local={expected_sha} registry={info.webc_sha256}"
+        raise PackageError(
+            f"published, but the registry stored different content: "
+            f"local={expected_sha} registry={info.webc_sha256}"
         )
     if info.webc_sha256 is None:
         print(
@@ -427,85 +432,111 @@ def main() -> int:
 
     published = 0
     skipped = 0
+    # full names resolvable on the registry for dependents: already published
+    # (even with a hash mismatch), published this run, or would-publish in a
+    # dry run
+    available: set[str] = set()
+    failures: list[tuple[str, str]] = []
+    # one broken package must not abort the rest: isolate each, collect
+    # failures, exit non-zero at the end
     for pkg in ordered:
-        published_info = get_published_package_version(
-            graphql_url, pkg.full_name, pkg.version
-        )
-        if published_info.exists:
-            if args.skip_sha_validation:
+        try:
+            published_info = get_published_package_version(
+                graphql_url, pkg.full_name, pkg.version
+            )
+            if published_info.exists:
+                available.add(pkg.full_name)
+                if args.skip_sha_validation:
+                    print(
+                        f"SKIP {pkg.full_name}@{pkg.version} path={pkg.path} "
+                        "already exists (hash validation skipped)"
+                    )
+                    skipped += 1
+                    continue
+                if published_info.webc_sha256 is None:
+                    raise PackageError(
+                        "cannot verify the published hash; the registry response "
+                        "did not include a usable SHA-256 hash"
+                    )
+                # the published artifact carries publish-time README lines;
+                # restage the local build with the recorded rev to reproduce it
+                # (artifacts published without provenance compare bare)
+                published_rev = recorded_rev(published_info.readme)
+                local_webc_sha256 = (
+                    staged_webc_sha256(pkg, published_rev)
+                    if published_rev is not None
+                    else build_webc_sha256(pkg.path, pkg)
+                )
+                if local_webc_sha256 != published_info.webc_sha256:
+                    raise PackageError(
+                        f"hash mismatch: local={local_webc_sha256} "
+                        f"registry={published_info.webc_sha256}; registry versions "
+                        "are immutable and no webc rel encoding exists yet "
+                        "(WASIX-TODO.md), so this version cannot be republished"
+                    )
                 print(
                     f"SKIP {pkg.full_name}@{pkg.version} path={pkg.path} "
-                    "already exists (hash validation skipped)"
+                    f"already exists (hash match: {local_webc_sha256})"
                 )
                 skipped += 1
                 continue
-            if published_info.webc_sha256 is None:
-                raise SystemExit(
-                    f"Cannot verify published hash for existing {pkg.full_name}@{pkg.version}; "
-                    "registry response did not include a usable SHA-256 hash."
-                )
-            # the published artifact carries publish-time README lines;
-            # restage the local build with the recorded rev to reproduce it
-            # (artifacts published without provenance compare bare)
-            published_rev = recorded_rev(published_info.readme)
-            local_webc_sha256 = (
-                staged_webc_sha256(pkg, published_rev)
-                if published_rev is not None
-                else build_webc_sha256(pkg.path, pkg)
-            )
-            if local_webc_sha256 != published_info.webc_sha256:
-                raise SystemExit(
-                    f"Hash mismatch for existing package {pkg.full_name}@{pkg.version}: "
-                    f"local={local_webc_sha256} registry={published_info.webc_sha256}. "
-                    "Registry versions are immutable and no webc rel encoding "
-                    "exists yet (WASIX-TODO.md), so this version cannot be "
-                    "republished."
-                )
-            print(
-                f"SKIP {pkg.full_name}@{pkg.version} path={pkg.path} "
-                f"already exists (hash match: {local_webc_sha256})"
-            )
-            skipped += 1
-            continue
 
-        # batch deps publish earlier (dependency order); the rest must already
-        # be in the registry or the published webc cannot resolve them
-        for dep_name, dep_version in sorted(pkg.dependencies.items()):
-            if dep_name in packages:
+            # batch deps publish earlier (dependency order); the rest must
+            # already be in the registry or the published webc cannot resolve
+            # them
+            for dep_name, dep_version in sorted(pkg.dependencies.items()):
+                if dep_name in available:
+                    continue
+                if dep_name in packages:
+                    raise PackageError(
+                        f"dependency {dep_name} failed earlier in this run"
+                    )
+                if not get_published_package_version(
+                    graphql_url, dep_name, dep_version
+                ).exists:
+                    raise PackageError(
+                        f"depends on {dep_name}@{dep_version}, which is neither "
+                        "published nor part of this run"
+                    )
+                available.add(dep_name)
+
+            if args.dry_run:
+                print(
+                    f"PUBLISH {pkg.full_name}@{pkg.version} path={pkg.path} (would publish)"
+                )
+                available.add(pkg.full_name)
+                published += 1
                 continue
-            if not get_published_package_version(
-                graphql_url, dep_name, dep_version
-            ).exists:
-                raise SystemExit(
-                    f"{pkg.full_name}@{pkg.version} depends on {dep_name}@{dep_version}, "
-                    "which is neither published nor part of this run."
+
+            print(f"PUBLISH {pkg.full_name}@{pkg.version} path={pkg.path} rev={rev}")
+            with tempfile.TemporaryDirectory(prefix="publish-webc-") as tmpdir:
+                staged = stage_with_provenance(pkg, rev, tmpdir)
+                staged_sha = build_webc_sha256(staged, pkg)
+                run(
+                    [
+                        "wasmer",
+                        "publish",
+                        "--non-interactive",
+                        "--registry",
+                        publish_registry,
+                    ],
+                    cwd=staged,
                 )
-
-        if args.dry_run:
-            print(
-                f"PUBLISH {pkg.full_name}@{pkg.version} path={pkg.path} (would publish)"
-            )
+            verify_published(graphql_url, pkg, staged_sha)
+            available.add(pkg.full_name)
             published += 1
-            continue
+        except (PackageError, subprocess.CalledProcessError) as e:
+            first = str(e).splitlines()[0][:400] if str(e) else "unknown error"
+            print(f"FAILED {pkg.full_name}@{pkg.version}: {first}")
+            failures.append((pkg.full_name, first))
 
-        print(f"PUBLISH {pkg.full_name}@{pkg.version} path={pkg.path} rev={rev}")
-        with tempfile.TemporaryDirectory(prefix="publish-webc-") as tmpdir:
-            staged = stage_with_provenance(pkg, rev, tmpdir)
-            staged_sha = build_webc_sha256(staged, pkg)
-            run(
-                [
-                    "wasmer",
-                    "publish",
-                    "--non-interactive",
-                    "--registry",
-                    publish_registry,
-                ],
-                cwd=staged,
-            )
-        verify_published(graphql_url, pkg, staged_sha)
-        published += 1
-
-    print(f"Done. published={published} skipped={skipped} total={len(ordered)}")
+    print(
+        f"Done. published={published} skipped={skipped} "
+        f"failed={len(failures)} total={len(ordered)}"
+    )
+    if failures:
+        print("failed: " + ", ".join(name for name, _ in failures))
+        return 1
     return 0
 
 
