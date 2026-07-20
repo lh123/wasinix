@@ -344,3 +344,8 @@ artifact at all yet. Needs a registry-side decision: treat build metadata as
 version identity, or bless the CLI's `--bump` patch-bump convention (and
 ideally stop stripping `package.metadata`). Wheels are unaffected (PEP 440
 `+wasix.N`, own index).
+
+Also: `wasmer publish` retries a `permission denied` GraphQL failure
+indefinitely (one attempt every ~2s until killed); a hard auth error should
+abort. Hit with a wasmer.io token against wasmer.wtf; tokens are
+per-registry.

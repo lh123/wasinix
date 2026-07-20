@@ -228,7 +228,14 @@
                     else p.bash
                   )
                 ];
-              text = ''exec ${interp} ${file} "$@"'';
+              text = ''
+                ${
+                  # CI log capture block-buffers python stdout, hiding all
+                  # progress until exit (or forever on cancel)
+                  lib.optionalString (interp == "python3") "export PYTHONUNBUFFERED=1"
+                }
+                exec ${interp} ${file} "$@"
+              '';
             };
         in {
           ci-build = run "ci-build" [p.jq p.nix-eval-jobs p.nix-fast-build p.findutils] "bash" ./scripts/ci-build.sh;

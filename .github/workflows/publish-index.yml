@@ -17,6 +17,10 @@ permissions:
   pages: write
   id-token: write
 
+env:
+  # dev registry/Edge for now, to try the volume publish end to end
+  WASMER_REGISTRY: wasmer.wtf
+
 jobs:
   publish:
     name: Publish python package index
@@ -30,11 +34,11 @@ jobs:
     # credentials at runtime (provisioning them on the first run). Job-level so
     # the publish step's condition can see whether it is configured.
     env:
-      WASMER_TOKEN: ${{ secrets.WASMER_TOKEN_DEV }}
+      # tokens are per-registry: WASMER_TOKEN for wasmer.io, WASMER_TOKEN_DEV
+      # for wasmer.wtf (dev); derived so the pair cannot drift
+      WASMER_TOKEN: ${{ contains(env.WASMER_REGISTRY, 'wasmer.wtf') && secrets.WASMER_TOKEN_DEV || secrets.WASMER_TOKEN }}
       # the app itself is resolved from pkgs/python-registry/app.yaml (app_id)
       INDEX_VOLUME: python-index
-      # dev registry/Edge for now, to try the volume publish end to end
-      WASMER_REGISTRY: wasmer.wtf
     steps:
       - name: Checkout
         uses: actions/checkout@v4

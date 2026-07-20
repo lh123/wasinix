@@ -52,9 +52,9 @@ jobs:
 
       - name: Publish
         env:
-          # the same token the python-index publish uses; it can publish to
-          # the target namespace
-          WASMER_TOKEN: ${{ secrets.WASMER_TOKEN }}
+          # tokens are per-registry: WASMER_TOKEN for wasmer.io,
+          # WASMER_TOKEN_DEV for wasmer.wtf (dev)
+          WASMER_TOKEN: ${{ contains(inputs.registry, 'wasmer.wtf') && secrets.WASMER_TOKEN_DEV || secrets.WASMER_TOKEN }}
           PACKAGES: ${{ inputs.packages }}
           REGISTRY: ${{ inputs.registry }}
           DRY_RUN: ${{ inputs.dry-run }}
