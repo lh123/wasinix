@@ -25,58 +25,65 @@
   wheelList = import ./overlay/python-packages/wheels.nix;
   pyImportOf = e: e.pyImport or (lib.replaceStrings ["-"] ["_"] e.attr);
 
-  # Smoke-test `import <mod>` the way `pip install` runs on a bare wasix target:
-  # the wheel + its python dep closure are copied into a plain (non-store) dir,
-  # then imported on the SELF-CONTAINED python webc with only that dir + HOME
-  # mounted and NO /nix/store. A wheel that needs an unmounted store path (a
-  # ctypes .so, a spawned binary) fails here, as it would under real pip. This
-  # is the runtime counterpart to the static `self-contained` guard below.
-  importTest = e: let
-    wheel = python3.pkgs.${e.attr};
-    # colon-joined site-packages of the wheel + all transitive python deps.
+  # Run a python `script` on the SELF-CONTAINED python webc with the wheel + its
+  # dep closure copied into a plain (non-store) dir and NO /nix/store mounted -- as
+  # `pip install --target` then a run would on a bare wasix target. A wheel that
+  # reaches an unmounted store path (a ctypes .so, a spawned binary) fails here, as
+  # it would under real pip. Only HOME is writable (some wheels resolve a config dir
+  # at import, e.g. matplotlib.get_configdir). The script fails the check by raising;
+  # the trailing marker confirms it ran through. Shared by the import smoke-test and
+  # the per-package tests/ (see mkWheel).
+  runPython = {
+    name,
+    wheel,
+    script,
+  }: let
     pythonPath = python3.pkgs.makePythonPath [wheel];
-    mod = pyImportOf e;
+    marker = "PYRUN_OK ${name}";
+    file = pkgs.writeText "${name}.py" ''
+      ${script}
+      print(${builtins.toJSON marker})
+    '';
   in
-    pkgs.runCommand "wheel-import-${e.attr}" {
+    pkgs.runCommand name {
       nativeBuildInputs = [effWasmer];
     } ''
       export HOME=$TMPDIR/home
       mkdir -p "$HOME"
       webc=$(${pkgs.findutils}/bin/find ${pythonWebc} -name '*.webc' | head -1)
 
-      # flatten the closure into one plain dir, as `pip install --target` would.
       site=$TMPDIR/site
       mkdir -p "$site"
       IFS=: read -ra _paths <<< ${lib.escapeShellArg pythonPath}
       for p in "''${_paths[@]}"; do
         [ -d "$p" ] && ${pkgs.rsync}/bin/rsync -a --chmod=u+w "$p"/ "$site"/
       done
+      cp ${file} "$site/__pyrun__.py"
 
       log=$(mktemp)
-      # Mount only the plain site dir + a writable HOME (some wheels resolve a
-      # config/cache dir at import, e.g. matplotlib.get_configdir). No /nix/store:
-      # the webc is self-contained, and any store path the wheel still reaches for
-      # is absent, so this fails exactly as a bare pip install would.
       if timeout 600 wasmer run \
         --volume "$site":/site \
         --mapdir /home:"$HOME" \
         --env HOME=/home \
         --env PYTHONPATH=/site \
-        "$webc" -- \
-        -c 'import ${mod}; print("WHEEL_IMPORT_OK ${mod}")' >"$log" 2>&1; then
-        if ${pkgs.gnugrep}/bin/grep -q "WHEEL_IMPORT_OK ${mod}" "$log"; then
-          cp "$log" "$out"
-        else
-          echo "import ${mod} did not confirm OK for wheel '${e.attr}':" >&2
-          cat "$log" >&2
-          exit 1
-        fi
+        "$webc" -- /site/__pyrun__.py >"$log" 2>&1 \
+        && ${pkgs.gnugrep}/bin/grep -q ${lib.escapeShellArg marker} "$log"; then
+        cp "$log" "$out"
       else
-        echo "wasmer run failed importing ${mod} (wheel '${e.attr}', no /nix/store - pip-like):" >&2
+        echo "python test '${name}' failed (no /nix/store, pip-like):" >&2
         cat "$log" >&2
         exit 1
       fi
     '';
+
+  # `import <mod>` smoke-test: the runtime counterpart to the static
+  # `self-contained` guard below.
+  importTest = e:
+    runPython {
+      name = "wheel-import-${e.attr}";
+      wheel = python3.pkgs.${e.attr};
+      script = "import ${pyImportOf e}";
+    };
 
   # Static guard: a wheel must not bake a /nix/store path it loads at runtime
   # (ctypes/cffi .so, a spawned binary) - that path won't exist on a bare wasix
@@ -129,6 +136,28 @@
       echo "OK ${e.attr}: closure all py3-none-any" > "$out"
     '';
 
+  # Per-package behavioural tests: overlay/python-packages/<attr>/tests/*.nix, each
+  # a function over a subset of {wheel, runPython, lib} returning named test
+  # derivations, folded into the wheel's test group -- the wheel analogue of the
+  # wasmer packages/<name>/tests/ convention.
+  pkgTestsDir = attr: ./overlay/python-packages + "/${attr}/tests";
+  pkgTests = e: let
+    dir = pkgTestsDir e.attr;
+    scope = {
+      wheel = python3.pkgs.${e.attr};
+      inherit runPython lib;
+    };
+  in
+    builtins.foldl' (
+      acc: fname: let
+        f = import (dir + "/${fname}");
+      in
+        acc // f (builtins.intersectAttrs (lib.functionArgs f) scope)
+    ) {}
+    (lib.attrNames (lib.filterAttrs
+      (n: t: t == "regular" && lib.hasSuffix ".nix" n && n != "helpers.nix")
+      (builtins.readDir dir)));
+
   # python3.pkgs.<attr> with .tests added (passthru-only, so the store path is
   # unchanged). Inherited nixpkgs passthru.tests are dropped: they are x86 test
   # suites that would leak into `checks`.
@@ -141,7 +170,8 @@
               import = importTest e;
               self-contained = selfContainedTest e;
             }
-            // lib.optionalAttrs (e.noarch or false) {noarch-closure = noarchClosureTest e;});
+            // lib.optionalAttrs (e.noarch or false) {noarch-closure = noarchClosureTest e;}
+            // lib.optionalAttrs (builtins.pathExists (pkgTestsDir e.attr)) (pkgTests e));
         };
     });
 in

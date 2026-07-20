@@ -1,6 +1,8 @@
 # Python wheels wasinix ships (nixpkgs python3.pkgs attr names); drives the
 # pythonWheels build targets and import smoke-tests. Build fixes, when needed,
 # live in overlay/python-packages/<attr>.nix and fold in automatically.
+# Behavioural tests beyond the bare import live in
+# overlay/python-packages/<attr>/tests/*.nix (see pkgs/python-wheels.nix runPython).
 #
 # Each entry:
 #   attr      python3.pkgs.<attr> (also the build-target / CI key)
