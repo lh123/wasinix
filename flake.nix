@@ -41,9 +41,14 @@
       passthru =
         (old.passthru or {})
         // {
-          wasix.updateNotes = [
-            {message = "check whether patches/wasmer-signal-inherit-on-fork.patch landed upstream (WASIX-TODO.md)";}
-          ];
+          wasix = {
+            # upstream's version stands still across our rev bumps, so the
+            # notes compare the pin instead
+            noteVersion = "${old.version}-${wasmer.shortRev or "dirty"}";
+            updateNotes = [
+              {message = "check whether patches/wasmer-signal-inherit-on-fork.patch landed upstream (WASIX-TODO.md)";}
+            ];
+          };
         };
     });
     wasix = import ./pkgs {
@@ -276,7 +281,7 @@
         updateNotes = let
           noted = lib.filterAttrs (_: wasixLib.hasUpdateNotes) ci;
           versionOf = drv: let
-            r = builtins.tryEval (drv.version or null);
+            r = builtins.tryEval (wasixLib.noteVersionOf drv);
           in
             if r.success
             then r.value

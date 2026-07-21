@@ -20,5 +20,5 @@ pyfinal.buildPythonPackage rec {
 
   build-system = [pyfinal.flit-core];
 
-  passthru.updateScript = nix-update-script {};
+  passthru.updateScript = nix-update-script {extraArgs = ["--flake"];};
 }

@@ -20,5 +20,5 @@ pyfinal.buildPythonPackage rec {
     pyfinal.hatch-vcs
   ];
 
-  passthru.updateScript = nix-update-script {};
+  passthru.updateScript = nix-update-script {extraArgs = ["--flake"];};
 }

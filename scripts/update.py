@@ -251,6 +251,11 @@ def run_update_script(t):
     for line in out.splitlines():
         print(f"  {line}")
     if p.returncode != 0:
+        # a --version-regex that excludes every available tag (prereleases
+        # only, e.g. s3-server) means nothing to bump, not a broken updater
+        if "No version matched the regex" in p.stderr:
+            found = " ".join(p.stderr.rsplit("versions were found:", 1)[-1].split())
+            return f"up to date (no release matches the version regex; found: {found})"
         raise RuntimeError(
             f"{t.command[0]} exited {p.returncode}:\n{(p.stderr or p.stdout).strip()}"
         )

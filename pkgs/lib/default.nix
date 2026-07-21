@@ -60,9 +60,15 @@ in rec {
   in
     r.success && r.value;
 
+  # What an updateNote's predicate compares. Defaults to the package version,
+  # but a package pinned by a flake input keeps upstream's version across our
+  # rev bumps, so it declares a version that moves with the pin
+  # (passthru.wasix.noteVersion).
+  noteVersionOf = drv: (wasixMetaOf drv).noteVersion or drv.version or null;
+
   # updateNotes whose predicate fires for (prior, current).
   firedNotesOf = prior: drv: let
-    version = drv.version or null;
+    version = noteVersionOf drv;
     defaultWhen = p: c: p != null && p != c;
     fired =
       map (
