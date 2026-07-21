@@ -98,6 +98,21 @@ jobs:
           # records a rev consumers can fetch
           ref: ${{ env.HEAD_SHA }}
 
+      # claims the comment before the long part, so the PR shows the preview
+      # is coming (and, on failure, that it was attempted)
+      - name: Comment (in progress)
+        if: steps.ctx.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "### PR preview"
+            echo
+            echo "Building for \`${HEAD_SHA:0:7}\`... ([run]($run_url))"
+          } >comment.md
+          bash scripts/pr-upsert-comment.sh "$PR" comment.md
+
       - name: Checkout base
         if: steps.ctx.outputs.proceed == 'true'
         uses: actions/checkout@v4
@@ -158,8 +173,11 @@ jobs:
             | sed 's|^|.#legacyPackages.x86_64-linux.|')
           nix build --accept-flake-config --no-link "${attrs[@]}"
           python3 pkgs/python-registry/make-index.py dists.json site --version-suffix "$TAG"
-          url=$(nix run .#scripts.preview-index-deploy --option accept-flake-config true -- \
-            site "wasinix-index-pr${PR}" | tail -1)
+          # capture the deploy exit separately: `url=$(... | tail -1)` under
+          # bash without pipefail would mask a failed deploy behind tail
+          nix run .#scripts.preview-index-deploy --option accept-flake-config true -- \
+            site "wasinix-index-pr${PR}" >deploy.out
+          url=$(tail -1 deploy.out)
           echo "url=$url" >>"$GITHUB_OUTPUT"
 
       - name: Comment
@@ -169,10 +187,6 @@ jobs:
           INDEX_URL: ${{ steps.index.outputs.url }}
         run: |
           {
-            # marker-based upsert, same pattern as post-report.js: --edit-last
-            # would clobber whichever bot comment happens to be newest (the CI
-            # report)
-            echo "<!-- wasinix-preview -->"
             echo "### PR preview (\`$TAG\`)"
             if [ "$(jq '.webcs | length' diff.json)" != 0 ]; then
               echo
@@ -190,11 +204,20 @@ jobs:
               echo "pip install --index-url $INDEX_URL/simple --extra-index-url ${prod:-<prod index>}/simple <pkg>"
               echo '```'
             fi
+            echo
+            echo "[workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
           } >comment.md
-          cid=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-            --jq '[.[] | select(.body | startswith("<!-- wasinix-preview -->"))][0].id // empty')
-          if [ -n "$cid" ]; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$cid" -F body=@comment.md >/dev/null
-          else
-            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md
-          fi
+          bash scripts/pr-upsert-comment.sh "$PR" comment.md
+
+      - name: Comment (failed)
+        if: failure() && steps.ctx.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "### PR preview"
+            echo
+            echo "Failed for \`${HEAD_SHA:0:7}\`. ([run]($run_url))"
+          } >comment.md
+          bash scripts/pr-upsert-comment.sh "$PR" comment.md

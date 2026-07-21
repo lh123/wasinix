@@ -27,5 +27,7 @@ owner: $owner
 package: .
 EOF
 
-(cd "$dir" && wasmer deploy --non-interactive --registry "$registry" >&2)
+# --no-wait: an ephemeral preview does not need the reachability poll, which
+# errored after 5 minutes on a fresh app even though the deploy succeeded
+(cd "$dir" && wasmer deploy --non-interactive --no-wait --registry "$registry" >&2)
 wasmer app get "$owner/$app" --registry "$registry" --format json | jq -r .url
