@@ -192,8 +192,8 @@ def prune_rels():
 
 WHEEL_HISTORY = REPO / "pkgs/overlay/python-packages/history.json"
 # {"wheel": {attr: version}, "cli": {overlay-attr: version}}, current (non-history)
-# versions captured in main() before the nixpkgs bump. Raw versions, matching
-# the history.json keys the loader mints from.
+# versions captured in main() before anything bumps. Raw versions, matching the
+# history.json keys the loader mints from.
 history_priors = {}
 
 
@@ -244,11 +244,16 @@ def crossed_major(prior, now):
     return prior.split(".")[0] != now.split(".")[0]
 
 
-def regen_history(_t):
-    # Retention is latest-per-major: a nixpkgs bump crossing a major leaves the
-    # outgoing version behind in the registry-history table (wheels and CLIs
-    # alike), so pinned consumers keep resolving. Minor-level retention stays a
-    # manual scripts/history.py call.
+def regen_history():
+    # Retention is latest-per-major: a bump crossing a major leaves the outgoing
+    # version behind in the registry-history table (wheels and CLIs alike), so
+    # pinned consumers keep resolving. Minor-level retention stays a manual
+    # scripts/history.py call.
+    #
+    # Not keyed to a target: what matters is that a SERVED version moved, and a
+    # package pinning its own src moves on its own updateScript, not on the
+    # nixpkgs bump. prune_rels drops the outgoing version's rel key either way,
+    # so retention has to cover the same ground or the two disagree.
     if not history_priors:
         return None
     cur = current_versions()
@@ -295,7 +300,6 @@ def regen_history(_t):
 REGEN_BY_NAME = {
     "rust-toolchain": regen_rust_bootstrap,
     "wasix-libc": regen_libc_witx,
-    "nixpkgs": regen_history,
 }
 
 # Flake inputs (flake.lock) have no package file to carry an updateScript.
@@ -449,14 +453,14 @@ def main():
 
     # captured before anything bumps: the `prior` side of the update notes
     priors = note_versions()
-    # the outgoing-major side of regen_history; only nixpkgs moves these
-    if any(t.name == "nixpkgs" for t in targets):
-        history_priors.update(current_versions())
+    # and of regen_history, below. Any target can move a served version.
+    history_priors.update(current_versions())
 
     # One flaky upstream must not abort the rest: isolate each target, collect
     # failures, and exit non-zero at the end so CI/the workflow notices.
     failures = []
     results = []  # (name, outcome) for the summary
+    any_changed = False  # gates the global regen steps below
     for t in targets:
         print(f"==> {t.name}")
         before = repo_status()
@@ -469,6 +473,7 @@ def main():
             results.append((t.name, f"FAILED: {first}"))
             continue
         changed = repo_status() != before
+        any_changed = any_changed or changed
         if outcome is None:
             outcome = "updated" if changed else "up to date"
         # Run the regen only on an actual bump (the working tree changed).
@@ -484,6 +489,17 @@ def main():
                 failures.append(f"{t.name} (regen)")
                 outcome += f"; regen FAILED: {str(e).splitlines()[0][:120]}"
         results.append((t.name, outcome))
+
+    # Retain before pruning: prune_rels drops the rel key of any version no
+    # longer served, which is exactly the version retention just brought back.
+    if any_changed:
+        try:
+            retained = regen_history()
+            if retained:
+                results.append(("history", retained))
+        except Exception as e:
+            failures.append("history retention")
+            results.append(("history", f"FAILED: {str(e).splitlines()[0][:120]}"))
 
     try:
         pruned = prune_rels()
