@@ -3,7 +3,11 @@
 # PATH", so we keep that (no baked /nix/store path -> the wheel stays
 # relocatable for pip); a consumer provides jq (the webc mounts the jq command,
 # a pip user installs it). Import does not spawn jq, so it works standalone.
-{pyfinal, ...}:
+{
+  pyfinal,
+  nix-update-script,
+  ...
+}:
 pyfinal.buildPythonPackage rec {
   pname = "jqpy";
   version = "1.0.0";
@@ -15,4 +19,6 @@ pyfinal.buildPythonPackage rec {
   };
 
   build-system = [pyfinal.flit-core];
+
+  passthru.updateScript = nix-update-script {};
 }

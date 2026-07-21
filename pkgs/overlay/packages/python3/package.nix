@@ -12,6 +12,7 @@
     prev,
     preferredProfilePackages,
     helpers,
+    nix-update-script,
     ...
   }: let
     lib = prev.lib;
@@ -373,7 +374,7 @@
             wasixOverrides =
               (import ../../python-packages {
                 callArgs = {
-                  inherit final prev preferredProfilePackages helpers lib;
+                  inherit final prev preferredProfilePackages helpers lib nix-update-script;
                   wasixPython = py;
                 };
               })

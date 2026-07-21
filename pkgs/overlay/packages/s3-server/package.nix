@@ -20,6 +20,11 @@ in
     buildFeatures = ["binary"];
     cargoHash = "sha256-iq6FnobEju7DIHacvoFPTTJDhCKMY3R4NE/QQKWiW9I=";
 
+    # No updateScript: the fork cuts no tags, so nix-update could only track the
+    # branch, and that rewrites the version to 0.1.17-unstable-<date>. Published
+    # webc versions are semver, and every date-derived rule either sorts BELOW
+    # the 0.1.17 already published or freezes major/minor forever. The rev moves
+    # when we merge a fix into the fork, which is the deliberate act below.
     passthru.wasix = {
       shipped = true;
       updateNotes = [

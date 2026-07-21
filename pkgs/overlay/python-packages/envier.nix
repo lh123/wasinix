@@ -1,6 +1,10 @@
 # envier for wasix (not in nixpkgs): DataDog's env-var configuration library,
 # pure python; ddtrace's runtime dep.
-{pyfinal, ...}:
+{
+  pyfinal,
+  nix-update-script,
+  ...
+}:
 pyfinal.buildPythonPackage rec {
   pname = "envier";
   version = "0.6.1";
@@ -15,4 +19,6 @@ pyfinal.buildPythonPackage rec {
     pyfinal.hatchling
     pyfinal.hatch-vcs
   ];
+
+  passthru.updateScript = nix-update-script {};
 }
