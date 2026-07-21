@@ -5,7 +5,7 @@ name: PR preview
 # Build completing for a same-repo PR labeled `preview`; the `labeled`
 # trigger covers labeling an already-green PR, whose Build's workflow_run
 # event has already fired. Publishes the PR's changed webcs to the dev
-# registry as <version>-pr<N>.<sha7> prereleases (distinct versions per
+# registry as <version>-pr<N>.g<sha7> prereleases (distinct versions per
 # iteration, hidden from `latest`; no cleanup exists, they accumulate on the
 # dev registry) and deploys the changed wheels as an ephemeral per-PR index
 # app, consumed as an overlay via --extra-index-url; preview-cleanup.yml
@@ -125,7 +125,9 @@ jobs:
       - name: Diff against base
         if: steps.ctx.outputs.proceed == 'true'
         run: |
-          echo "TAG=pr${PR}.${HEAD_SHA:0:7}" >>"$GITHUB_ENV"
+          # the g prefix keeps the sha segment alphanumeric: an all-digit sha
+          # with a leading zero is invalid semver (the registry rejects it)
+          echo "TAG=pr${PR}.g${HEAD_SHA:0:7}" >>"$GITHUB_ENV"
           nix run .#scripts.preview-diff --option accept-flake-config true -- base | tee diff.json
           rm -rf base
 

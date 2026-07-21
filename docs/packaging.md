@@ -139,7 +139,7 @@ Label a same-repo PR `preview`: after its Build goes green (the CI cache
 then serves every artifact; labeling an already-green PR triggers
 immediately), `preview.yml` diffs it against its base at the drvPath level
 (`scripts/preview-diff.py`) and publishes what changed.
-Webcs go to the dev registry as `<version>-pr<N>.<sha7>` prereleases:
+Webcs go to the dev registry as `<version>-pr<N>.g<sha7>` prereleases:
 distinct versions per iteration, hidden from `latest`, not deletable (they
 accumulate on wasmer.wtf). Changed wheels become an ephemeral per-PR Edge
 app serving an overlay index; `pip install --index-url <preview>/simple

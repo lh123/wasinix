@@ -271,8 +271,11 @@ def get_published_package_version(
             f"Invalid GraphQL JSON response for {full_name}@{version}: {exc}"
         ) from exc
 
+    # per-version resolver errors (e.g. a version string the backend refuses
+    # to parse): a per-package failure, not an abort; transport errors above
+    # stay fatal
     if "errors" in doc and doc["errors"]:
-        raise SystemExit(
+        raise PackageError(
             f"GraphQL returned errors for {full_name}@{version}: {doc['errors']}"
         )
 
