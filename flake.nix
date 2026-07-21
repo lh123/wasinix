@@ -246,6 +246,8 @@
           publish-index = run "publish-index" [wasmerRuntime p.rclone p.python3 p.gawk p.gnused] "bash" ./scripts/publish-index.sh;
           publish-webc = run "publish-webc" [wasmerRuntime] "python3" ./scripts/publish-webc.py;
           history = run "history" [] "python3" ./scripts/history.py;
+          preview-diff = run "preview-diff" [] "python3" ./scripts/preview-diff.py;
+          preview-index-deploy = run "preview-index-deploy" [wasmerRuntime p.jq] "bash" ./scripts/preview-index-deploy.sh;
           update = run "update" [p.nix-update p.nix-prefetch-git p.cargo] "python3" ./scripts/update.py;
         };
 

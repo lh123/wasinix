@@ -133,6 +133,18 @@ consumers actually pin: latest per major, occasionally latest per minor.
 (icu-style `{names, packages}` families are only for packages nixpkgs itself
 carries at multiple versions, not for minting historical ones.)
 
+## PR previews
+
+Label a same-repo PR `preview`: `preview.yml` diffs it against its base at
+the drvPath level (`scripts/preview-diff.py`) and publishes what changed.
+Webcs go to the dev registry as `<version>-pr<N>.<sha7>` prereleases:
+distinct versions per iteration, hidden from `latest`, not deletable (they
+accumulate on wasmer.wtf). Changed wheels become an ephemeral per-PR Edge
+app serving an overlay index; `pip install --index-url <preview>/simple
+--extra-index-url <prod>/simple` prefers the preview wheels by their longer
+local version. The app is deleted when the PR closes or drops the label
+(`preview-cleanup.yml`), and the PR gets a comment with the URLs.
+
 ## A Python package or wheel
 
 - Ship a wheel: add `{attr = "<python3.pkgs name>";}` to

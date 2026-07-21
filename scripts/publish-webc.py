@@ -343,12 +343,34 @@ def recorded_rev(readme: str | None) -> str | None:
     return m.group(1) if m else None
 
 
-def stage_with_provenance(pkg: Package, rev: str, tmpdir: str) -> Path:
+def stage_with_provenance(
+    pkg: Package,
+    rev: str,
+    tmpdir: str,
+    preview_tag: str | None = None,
+    batch: frozenset[tuple[str, str]] = frozenset(),
+) -> Path:
     dst = Path(tmpdir) / "pkg"
     shutil.copytree(pkg.path, dst)
     for p in dst.rglob("*"):
         p.chmod(p.stat().st_mode | 0o200)
     name = pkg.full_name.split("/", 1)[1]
+    if preview_tag:
+        # ephemeral prerelease: distinct version per PR iteration, hidden from
+        # `latest`; batch-internal dep pins follow so every reference resolves
+        toml_path = dst / "wasmer.toml"
+        text = toml_path.read_text()
+        text = text.replace(
+            f'version = "{pkg.version}"',
+            f'version = "{pkg.version}-{preview_tag}"',
+            1,
+        )
+        for dep, ver in pkg.dependencies.items():
+            if (dep, ver) in batch:
+                text = text.replace(
+                    f'"{dep}" = "{ver}"', f'"{dep}" = "{ver}-{preview_tag}"', 1
+                )
+        toml_path.write_text(text)
     if pkg.source:
         src_file, _, src_line = pkg.source.rpartition(":")
         origin = (
@@ -371,12 +393,14 @@ def staged_webc_sha256(pkg: Package, rev: str) -> str:
         return build_webc_sha256(stage_with_provenance(pkg, rev, tmpdir), pkg)
 
 
-def verify_published(graphql_url: str, pkg: Package, expected_sha: str) -> None:
+def verify_published(
+    graphql_url: str, pkg: Package, version: str, expected_sha: str
+) -> None:
     # `wasmer publish` can exit 0 without tagging anything (WASIX-TODO.md), so
     # re-query until the version shows up; retries cover indexing lag.
     info = None
     for _ in range(5):
-        info = get_published_package_version(graphql_url, pkg.full_name, pkg.version)
+        info = get_published_package_version(graphql_url, pkg.full_name, version)
         if info.exists:
             break
         time.sleep(5)
@@ -392,7 +416,7 @@ def verify_published(graphql_url: str, pkg: Package, expected_sha: str) -> None:
         )
     if info.webc_sha256 is None:
         print(
-            f"WARN: registry returned no hash for {pkg.full_name}@{pkg.version}; "
+            f"WARN: registry returned no hash for {pkg.full_name}@{version}; "
             "cannot cross-check the published content"
         )
 
@@ -427,6 +451,12 @@ def main() -> int:
         default="",
         help="wasinix git rev recorded in each published README (default: HEAD, -dirty suffixed).",
     )
+    parser.add_argument(
+        "--preview",
+        metavar="TAG",
+        help="Publish as <version>-<TAG> prerelease previews (ephemeral, hidden "
+        "from `latest`); existing preview versions are skipped unverified.",
+    )
     args = parser.parse_args()
 
     rev = args.rev
@@ -458,16 +488,20 @@ def main() -> int:
     failures: list[tuple[str, str]] = []
     # one broken package must not abort the rest: isolate each, collect
     # failures, exit non-zero at the end
+    batch = frozenset(packages)
     for pkg in ordered:
         try:
+            pub_version = (
+                f"{pkg.version}-{args.preview}" if args.preview else pkg.version
+            )
             published_info = get_published_package_version(
-                graphql_url, pkg.full_name, pkg.version
+                graphql_url, pkg.full_name, pub_version
             )
             if published_info.exists:
                 available.add((pkg.full_name, pkg.version))
-                if args.skip_sha_validation:
+                if args.skip_sha_validation or args.preview:
                     print(
-                        f"SKIP {pkg.full_name}@{pkg.version} path={pkg.path} "
+                        f"SKIP {pkg.full_name}@{pub_version} path={pkg.path} "
                         "already exists (hash validation skipped)"
                     )
                     skipped += 1
@@ -494,7 +528,7 @@ def main() -> int:
                         "(WASIX-TODO.md), so this version cannot be republished"
                     )
                 print(
-                    f"SKIP {pkg.full_name}@{pkg.version} path={pkg.path} "
+                    f"SKIP {pkg.full_name}@{pub_version} path={pkg.path} "
                     f"already exists (hash match: {local_webc_sha256})"
                 )
                 skipped += 1
@@ -521,15 +555,15 @@ def main() -> int:
 
             if args.dry_run:
                 print(
-                    f"PUBLISH {pkg.full_name}@{pkg.version} path={pkg.path} (would publish)"
+                    f"PUBLISH {pkg.full_name}@{pub_version} path={pkg.path} (would publish)"
                 )
                 available.add((pkg.full_name, pkg.version))
                 published += 1
                 continue
 
-            print(f"PUBLISH {pkg.full_name}@{pkg.version} path={pkg.path} rev={rev}")
+            print(f"PUBLISH {pkg.full_name}@{pub_version} path={pkg.path} rev={rev}")
             with tempfile.TemporaryDirectory(prefix="publish-webc-") as tmpdir:
-                staged = stage_with_provenance(pkg, rev, tmpdir)
+                staged = stage_with_provenance(pkg, rev, tmpdir, args.preview, batch)
                 staged_sha = build_webc_sha256(staged, pkg)
                 run(
                     [
@@ -541,12 +575,12 @@ def main() -> int:
                     ],
                     cwd=staged,
                 )
-            verify_published(graphql_url, pkg, staged_sha)
+            verify_published(graphql_url, pkg, pub_version, staged_sha)
             available.add((pkg.full_name, pkg.version))
             published += 1
         except (PackageError, subprocess.CalledProcessError) as e:
             first = str(e).splitlines()[0][:400] if str(e) else "unknown error"
-            print(f"FAILED {pkg.full_name}@{pkg.version}: {first}")
+            print(f"FAILED {pkg.full_name}@{pub_version}: {first}")
             failures.append((pkg.full_name, first))
 
     print(

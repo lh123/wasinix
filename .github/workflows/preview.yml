@@ -1,0 +1,121 @@
+name: PR preview
+
+# Label-gated (`preview`) and same-repo only (needs secrets). Publishes the
+# PR's changed webcs to the dev registry as <version>-pr<N>.<sha7> prereleases
+# (distinct versions per iteration, hidden from `latest`; no cleanup exists,
+# they accumulate on the dev registry) and deploys the changed wheels as an
+# ephemeral per-PR index app, consumed as an overlay via --extra-index-url;
+# preview-cleanup.yml deletes the app when the PR closes.
+on:
+  pull_request:
+    types: [opened, synchronize, labeled]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    name: Publish PR preview
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'preview') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      WASMER_TOKEN: ${{ secrets.WASMER_TOKEN_DEV }}
+      WASMER_REGISTRY: wasmer.wtf
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # the real head commit, not the merge ref: the preview provenance
+          # records a rev consumers can fetch
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Checkout base
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31.9.1
+        with:
+          extra_nix_config: |
+            extra-substituters = https://nix-cache.wasix.org
+            extra-trusted-public-keys = wasinix-1:jvsqbOJGsZxMvg97fuyNCWCc+t2nn6uHB47kQCGNmXI=
+            trusted-users = root runner
+
+      - name: Cache flake inputs
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: ~/.cache/nix
+          key: nix-flake-inputs-${{ hashFiles('flake.lock') }}
+          restore-keys: nix-flake-inputs-
+
+      - name: Diff against base
+        run: |
+          echo "TAG=pr${PR}.${HEAD_SHA:0:7}" >>"$GITHUB_ENV"
+          nix run .#scripts.preview-diff --option accept-flake-config true -- base | tee diff.json
+          rm -rf base
+
+      - name: Publish preview webcs
+        run: |
+          names=$(jq -r '.webcs[].attr' diff.json)
+          if [ -z "$names" ]; then
+            echo "no webcs changed"
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          nix run .#scripts.publish-webc --option accept-flake-config true -- \
+            --registry "$WASMER_REGISTRY" --rev "$HEAD_SHA" --preview "$TAG" $names
+
+      - name: Deploy preview index
+        id: index
+        run: |
+          if [ "$(jq '.wheels | length' diff.json)" = 0 ]; then
+            echo "no wheels changed"
+            exit 0
+          fi
+          jq '.wheels' diff.json >dists.json
+          jq -r '.wheels[].attr' diff.json \
+            | sed 's|^|.#legacyPackages.x86_64-linux.|' \
+            | xargs -r nix build --accept-flake-config --no-link
+          python3 pkgs/python-registry/make-index.py dists.json site --version-suffix "$TAG"
+          url=$(nix run .#scripts.preview-index-deploy --option accept-flake-config true -- \
+            site "wasinix-index-pr${PR}" | tail -1)
+          echo "url=$url" >>"$GITHUB_OUTPUT"
+
+      - name: Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INDEX_URL: ${{ steps.index.outputs.url }}
+        run: |
+          {
+            echo "### PR preview (\`$TAG\`)"
+            if [ "$(jq '.webcs | length' diff.json)" != 0 ]; then
+              echo
+              echo "Webcs on \`$WASMER_REGISTRY\` (failures listed in the workflow log):"
+              jq -r --arg t "$TAG" --arg r "$WASMER_REGISTRY" \
+                '.webcs[] | "- `wasmer run kilyanni/\(.name)@\(.version)-\($t) --registry \($r)`"' \
+                diff.json
+            fi
+            if [ -n "$INDEX_URL" ]; then
+              prod=$(nix shell .#wasmer-bin -c wasmer app get kilyanni/python-registry \
+                --registry "$WASMER_REGISTRY" --format json | jq -r '.url // empty' || true)
+              echo
+              echo "Wheel overlay index (preferred over the published wheels by version):"
+              echo '```'
+              echo "pip install --index-url $INDEX_URL/simple --extra-index-url ${prod:-<prod index>}/simple <pkg>"
+              echo '```'
+            fi
+          } >comment.md
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --body-file comment.md \
+            || gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md

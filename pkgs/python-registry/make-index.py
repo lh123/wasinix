@@ -14,6 +14,7 @@ Emits, per PEP 503 (+ PEP 629 version meta, PEP 658/714 metadata files):
   <out>/simple/<project>/<wheel>.metadata   its core metadata, for resolvers
 """
 
+import argparse
 import base64
 import csv
 import hashlib
@@ -77,12 +78,19 @@ def bump_metadata_version(metadata: bytes, version: str, new_version: str) -> by
     sys.exit("METADATA has no Version header")
 
 
-def rewrite_wheel(src: Path, dest_dir: Path, rel: int) -> Path:
-    """Copy the wheel with +wasix.<rel> appended to its version."""
+def rewrite_wheel(
+    src: Path, dest_dir: Path, rel: int, suffix: str | None = None
+) -> Path:
+    """Copy the wheel with +wasix.<rel>[.<suffix>] appended to its version.
+
+    The suffix (pr123.abc1234) marks PR-preview wheels: a longer local version
+    with an equal prefix sorts higher, so pip prefers them over the published
+    wheel when the preview index is used via --extra-index-url.
+    """
     name, version, rest = src.name.split("-", 2)
     if "+" in version:
         sys.exit(f"{src.name}: already carries a local version")
-    new_version = f"{version}+wasix.{rel}"
+    new_version = f"{version}+wasix.{rel}" + (f".{suffix}" if suffix else "")
 
     with zipfile.ZipFile(src) as zin:
         dist_infos = {
@@ -469,8 +477,16 @@ def project_page(project: str, files: list[tuple]) -> str:
 
 
 def main() -> None:
-    dists = json.loads(Path(sys.argv[1]).read_text())
-    out = Path(sys.argv[2])
+    ap = argparse.ArgumentParser()
+    ap.add_argument("dists", type=Path)
+    ap.add_argument("out", type=Path)
+    ap.add_argument(
+        "--version-suffix",
+        help="extra local-version segments (pr123.abc1234) for PR-preview indexes",
+    )
+    args = ap.parse_args()
+    dists = json.loads(args.dists.read_text())
+    out = args.out
 
     # normalized project name -> {wheel filename -> rewritten path}
     projects: dict[str, dict[str, Path]] = {}
@@ -485,7 +501,7 @@ def main() -> None:
         entry_dir = tmp / str(i)
         entry_dir.mkdir()
         for whl in wheels:
-            moved = rewrite_wheel(whl, entry_dir, entry["rel"])
+            moved = rewrite_wheel(whl, entry_dir, entry["rel"], args.version_suffix)
             project = normalize(moved.name.split("-", 1)[0])
             prev = projects.setdefault(project, {}).setdefault(moved.name, moved)
             if prev != moved and prev.read_bytes() != moved.read_bytes():

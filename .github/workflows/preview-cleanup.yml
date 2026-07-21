@@ -1,0 +1,48 @@
+name: PR preview cleanup
+
+# Deletes the per-PR index app when the PR closes or drops the `preview`
+# label. Preview webc prereleases cannot be deleted (registry versions are
+# immutable); they accumulate on the dev registry.
+on:
+  pull_request:
+    types: [closed, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Delete preview index app
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action == 'closed' || github.event.label.name == 'preview')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      WASMER_TOKEN: ${{ secrets.WASMER_TOKEN_DEV }}
+      WASMER_REGISTRY: wasmer.wtf
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31.9.1
+        with:
+          extra_nix_config: |
+            extra-substituters = https://nix-cache.wasix.org
+            extra-trusted-public-keys = wasinix-1:jvsqbOJGsZxMvg97fuyNCWCc+t2nn6uHB47kQCGNmXI=
+            trusted-users = root runner
+
+      - name: Cache flake inputs
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: ~/.cache/nix
+          key: nix-flake-inputs-${{ hashFiles('flake.lock') }}
+          restore-keys: nix-flake-inputs-
+
+      - name: Delete app
+        run: |
+          nix shell .#wasmer-bin --accept-flake-config -c wasmer app delete \
+            "kilyanni/wasinix-index-pr${PR}" --registry "$WASMER_REGISTRY" --non-interactive \
+            || echo "no preview app to delete"
