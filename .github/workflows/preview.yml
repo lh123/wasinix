@@ -152,9 +152,11 @@ jobs:
             exit 0
           fi
           jq '.wheels' diff.json >dists.json
-          jq -r '.wheels[].attr' diff.json \
-            | sed 's|^|.#legacyPackages.x86_64-linux.|' \
-            | xargs -r nix build --accept-flake-config --no-link
+          # attrs carry quoted version segments (anthropic."0.109.1"^dist);
+          # xargs would strip the quotes, so build an argv array instead
+          mapfile -t attrs < <(jq -r '.wheels[].attr' diff.json \
+            | sed 's|^|.#legacyPackages.x86_64-linux.|')
+          nix build --accept-flake-config --no-link "${attrs[@]}"
           python3 pkgs/python-registry/make-index.py dists.json site --version-suffix "$TAG"
           url=$(nix run .#scripts.preview-index-deploy --option accept-flake-config true -- \
             site "wasinix-index-pr${PR}" | tail -1)
