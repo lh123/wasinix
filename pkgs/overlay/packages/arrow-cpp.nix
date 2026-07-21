@@ -2,8 +2,12 @@
 # needs (compute/csv/json/filesystem/ipc/parquet + zlib/zstd/lz4/snappy
 # codecs). All network/storage backends, allocators (jemalloc/mimalloc don't
 # target wasm), orc/dataset/acero and the test/utility executables are off.
-# RapidJSON comes BUNDLED (header-only vendor drop) because nixpkgs'
-# rapidjson derivation builds wasm gtest binaries.
+# RapidJSON comes BUNDLED: arrow requires one specific pre-release commit and
+# hash-verifies it (URL_HASH against ARROW_RAPIDJSON_BUILD_SHA256_CHECKSUM), so
+# nixpkgs' snapshot cannot be substituted the way libddwaf's can (its
+# ExternalProject_Add carries no URL_HASH). ARROW_RAPIDJSON_URL just makes
+# arrow's own download hermetic; the values below mirror cpp/thirdparty/
+# versions.txt and must move with it.
 {
   final,
   prev,
@@ -79,5 +83,8 @@ in
     # arrow throws (Status is the norm, but decimal/json paths do throw), and
     # io/hdfs_internal.cc includes dlfcn.h, which only the PIC sysroots ship.
     passthru.wasix.supportedProfiles = helpers.profiles.pic;
+    passthru.wasix.updateNotes = [
+      {message = "recheck ARROW_RAPIDJSON_URL against cpp/thirdparty/versions.txt (ARROW_RAPIDJSON_BUILD_VERSION + _SHA256_CHECKSUM); arrow hash-verifies it, so a bump that moves the pin fails the build";}
+    ];
   }
   base
