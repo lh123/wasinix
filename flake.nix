@@ -200,14 +200,18 @@
         inherit ci;
 
         # CI shell steps as runnable apps with nix-pinned deps: `nix run
-        # .#scripts.<name>`. The script is store-copied, so this needs no git
-        # checkout (the remote CI builder runs ci-build over the store-copied
-        # flake source); a script's data and sibling paths resolve against the
-        # caller's CWD, which in CI is the checkout root. Only the deps come
-        # from nix. The local-dev remote-builder scripts are $0-relative and
-        # stay out.
+        # .#scripts.<name>`. The scripts dir is store-copied, so this needs no
+        # git checkout (the remote CI builder runs ci-build over the
+        # store-copied flake source) and a python script imports its siblings
+        # from the same copy (update.py -> updater_lib); a script's DATA paths
+        # still resolve against the caller's CWD, which in CI is the checkout
+        # root. Only the deps come from nix. The local-dev remote-builder
+        # scripts are $0-relative and stay out.
         scripts = let
           p = wasix.pkgs;
+          # the whole dir, not the single file: any script edit re-derives
+          # every wrapper, which is cheap (they only write a shell stub)
+          dir = ./scripts;
           # inheritPath = false: PATH is exactly the declared deps, so a script
           # reaching for an undeclared tool fails loudly instead of silently
           # picking up the ambient one. Common to every wrapper: git, coreutils,
@@ -233,22 +237,22 @@
                   # progress until exit (or forever on cancel)
                   lib.optionalString (interp == "python3") "export PYTHONUNBUFFERED=1"
                 }
-                exec ${interp} ${file} "$@"
+                exec ${interp} ${dir}/${file} "$@"
               '';
             };
         in {
-          ci-build = run "ci-build" [p.jq p.nix-eval-jobs p.nix-fast-build p.findutils] "bash" ./scripts/ci-build.sh;
-          rebuild-diff = run "rebuild-diff" [p.python3 p.nix-eval-jobs] "bash" ./scripts/rebuild-diff.sh;
-          content-diff = run "content-diff" [] "python3" ./scripts/content-diff.py;
-          ci-report = run "ci-report" [] "python3" ./scripts/ci-report.py;
-          publish-eval-map = run "publish-eval-map" [p.awscli2] "bash" ./scripts/publish-eval-map.sh;
-          bump-rel = run "bump-rel" [] "python3" ./scripts/bump-rel.py;
-          publish-index = run "publish-index" [wasmerRuntime p.rclone p.python3 p.gawk p.gnused] "bash" ./scripts/publish-index.sh;
-          publish-webc = run "publish-webc" [wasmerRuntime] "python3" ./scripts/publish-webc.py;
-          history = run "history" [] "python3" ./scripts/history.py;
-          preview-diff = run "preview-diff" [] "python3" ./scripts/preview-diff.py;
-          preview-index-deploy = run "preview-index-deploy" [wasmerRuntime p.jq] "bash" ./scripts/preview-index-deploy.sh;
-          update = run "update" [p.nix-update p.nix-prefetch-git p.cargo] "python3" ./scripts/update.py;
+          ci-build = run "ci-build" [p.jq p.nix-eval-jobs p.nix-fast-build p.findutils] "bash" "ci-build.sh";
+          rebuild-diff = run "rebuild-diff" [p.python3 p.nix-eval-jobs] "bash" "rebuild-diff.sh";
+          content-diff = run "content-diff" [] "python3" "content-diff.py";
+          ci-report = run "ci-report" [] "python3" "ci-report.py";
+          publish-eval-map = run "publish-eval-map" [p.awscli2] "bash" "publish-eval-map.sh";
+          bump-rel = run "bump-rel" [] "python3" "bump-rel.py";
+          publish-index = run "publish-index" [wasmerRuntime p.rclone p.python3 p.gawk p.gnused] "bash" "publish-index.sh";
+          publish-webc = run "publish-webc" [wasmerRuntime] "python3" "publish-webc.py";
+          history = run "history" [] "python3" "history.py";
+          preview-diff = run "preview-diff" [] "python3" "preview-diff.py";
+          preview-index-deploy = run "preview-index-deploy" [wasmerRuntime p.jq] "bash" "preview-index-deploy.sh";
+          update = run "update" [p.nix-update p.nix-prefetch-git p.cargo] "python3" "update.py";
         };
 
         # rels.json key -> list of served upstream versions (wheels can serve history versions
