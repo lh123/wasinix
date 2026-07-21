@@ -114,10 +114,11 @@ in
       CMAKE_TOOLCHAIN_FILE = toolchainFile;
     };
 
-    passthru.updateScript = nix-update-script {};
+    # bumps, then re-derives libddwaf from the new setup.py's LIBDDWAF_VERSION
+    # (the nix-update command is passed through as its argv)
+    passthru.updateScript = ["pkgs/overlay/python-packages/ddtrace/update.py"] ++ nix-update-script {};
     passthru.wasix.updateNotes = [
       {message = "regenerate ./Cargo.lock (upstream's src/native lock omits datadog-ffe and lacks the mio/socket2 wasix-crate-patch deps); drop the override if upstream's lock is consistent";}
       {message = "re-hash cargoDeps: nix-update bumps version+src but not a fetchCargoVendor hash spelled inside the package";}
-      {message = "bump libddwaf (overlay/packages/libddwaf) to the new LIBDDWAF_VERSION in setup.py; the bundled .so must match";}
     ];
   }

@@ -1,4 +1,8 @@
-{final, ...}: let
+{
+  final,
+  nix-update-script,
+  ...
+}: let
   inherit (final) lib;
 in
   final.rustPlatform.buildRustPackage {
@@ -20,14 +24,17 @@ in
     buildFeatures = ["binary"];
     cargoHash = "sha256-iq6FnobEju7DIHacvoFPTTJDhCKMY3R4NE/QQKWiW9I=";
 
-    # No updateScript: the fork cuts no tags, so nix-update could only track the
-    # branch, and that rewrites the version to 0.1.17-unstable-<date>. Published
-    # webc versions are semver, and every date-derived rule either sorts BELOW
-    # the 0.1.17 already published or freezes major/minor forever. The rev moves
-    # when we merge a fix into the fork, which is the deliberate act below.
+    # Stable tags only: a published webc version is semver MAJOR.MINOR.PATCH, so
+    # a prerelease tag (0.1.20-rc.1) has a fourth component with nowhere to go,
+    # and the registry hides prereleases from `latest` anyway (WASIX-TODO.md).
+    passthru.updateScript = nix-update-script {
+      extraArgs = ["--flake" "--version-regex" "^([0-9.]+)$"];
+    };
+
     passthru.wasix = {
       shipped = true;
       updateNotes = [
+        {message = "the fork's only tag is 0.1.20-rc.1; until it cuts a stable one the update target fails with \"No version matched the regex\" (prereleases are excluded on purpose, see updateScript)";}
         {message = "drop patches/0001-fix-store-metadata-multipart-parts-in-a-reserved-dir.patch and bump the rev once the fix merges into wasix-org/s3-server";}
         {message = "drop patches/0002-fix-recursive-listing-idempotent-delete-directory-ke.patch and bump the rev once the fix merges into wasix-org/s3-server";}
       ];
