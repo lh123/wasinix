@@ -27,8 +27,6 @@ in
       '';
       patches = [./patches/0001-wasix-term-fallback.patch];
       meta.platforms = ["wasm32-wasi"];
-      # upstream version is "685"; auto-pad would give 685.0.0, we want 685.0.1.
-      passthru.wasmer.version = "685.0.1";
     }
     prev.less
   )

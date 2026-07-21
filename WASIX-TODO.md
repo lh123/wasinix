@@ -336,8 +336,8 @@ embeds neither the version nor `[package.metadata]`: `wasmer package build`
 emits byte-identical webcs for `x`, `x+meta`, `x-pre`, and any
 `package.metadata` contents (verified with kilyanni/crabsay), and publishing
 `x+meta` over an existing `x` exits 0 without tagging anything (verified on
-wasmer.wtf). Prereleases would tag as distinct versions but hide from
-`latest`. So a changed webc at an unchanged upstream version cannot be
+wasmer.wtf). Prereleases would tag as distinct versions but never resolve
+(see below). So a changed webc at an unchanged upstream version cannot be
 republished, and the `wasix-rel` recorded in `[package.metadata]` is
 source-manifest plumbing only; a rel bump does not change the published
 artifact at all yet. Needs a registry-side decision: treat build metadata as
@@ -349,3 +349,44 @@ Also: `wasmer publish` retries a `permission denied` GraphQL failure
 indefinitely (one attempt every ~2s until killed); a hard auth error should
 abort. Hit with a wasmer.io token against wasmer.wtf; tokens are
 per-registry.
+
+### a prerelease-only package never resolves 🔴
+
+`wasmer run <owner>/<pkg>` with no version cannot reach a package whose only
+published versions are prereleases, so `1.2.4-unstable.2026.7.6` for a VCS
+snapshot is unusable today. This is client-side, not a registry decision: the
+resolver fetches every version (`lib/wasix/src/runtime/resolver/
+backend_source.rs`, the `getPackage { versions { ... } }` query, so not the
+API's `lastVersion`), an absent version becomes `VersionReq::STAR`, and
+`version_constraint.matches(&version)` filters locally. The `semver` crate
+deliberately excludes prereleases from a comparator that names none, which is
+cargo's rule, so `*` matches nothing here. `local_registry_source.rs` and
+`in_memory_source.rs` filter the same way, so `--include-webc` trees are
+affected too and the gap does not show up in local testing.
+
+Fix in the resolver, matching pip (PEP 440 mandates the fallback when every
+candidate is a prerelease) and npm (`latest` points at a prerelease on first
+publish): when no version satisfies the constraint and every candidate is a
+prerelease, take the highest prerelease. Packages that have any stable release
+keep resolving to it, so `latest` never regresses to a prerelease once one
+exists. That covers the case we need, since a package tracking a VCS snapshot
+has no stable versions by construction.
+
+Until then `<ver>-unstable-<date>` has no correct encoding: it needs a version
+strictly between `<ver>` and the next patch, and semver's only mechanism for
+that is a prerelease. Bare `0-unstable-<date>` is encodable as `0.0.YYYYMMDD`
+(crabsay does this) since it has no stable release to sit above.
+
+### upstream versions with more than three numeric components 🟡
+
+Semver has three fields and pandoc's PVP `3.7.0.2` has four. Truncating
+collides (`3.7.0.2` and `3.7.0.3` both land on `3.7.0`), and any fold that
+avoids the collision has to cover the package's whole version history to stay
+monotone: transforming only the 4-component releases puts `3.7.0.2` above
+`3.7.1`. That makes it per-package knowledge, so `toSemver` now refuses and
+the package declares a rule in `passthru.wasmer.version` (a function of the
+upstream version, so it survives bumps). pandoc folds the PVP tail base-100,
+giving `3.7.0.2` -> `3.7.2` and `3.7.1` -> `3.7.100`.
+
+Nothing to fix upstream; noted because the next four-component package will
+hit the throw and needs to know why truncating is not the answer.

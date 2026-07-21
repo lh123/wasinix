@@ -2,6 +2,8 @@
 # derived from the package; overrides live in its `passthru.wasmer`:
 #   name        ? meta.mainProgram or pname        (e.g. git-minimal -> "git")
 #   version     ? toSemver package.version          (3.12 -> 3.12.0)
+#                 a function upstreamVersion -> semver, for versions toSemver
+#                 refuses; never a literal, it would freeze across bumps
 #   description ? meta.description
 #   license     ? meta.license (spdxId/shortName)
 #   owner       ? "kilyanni"
@@ -25,14 +27,26 @@
   w = package.passthru.wasmer or {};
 
   # Coerce a version to semver MAJOR.MINOR.PATCH (wasmer rejects anything
-  # else, including leading zeros): "9.0" -> "9.0.0", "5.3p9" -> "5.3.9",
-  # "0-unstable-2023-02-22" -> "0.2023.2".
-  toSemver = v: let
+  # else, including leading zeros): "9.0" -> "9.0.0", "5.3p9" -> "5.3.9".
+  #
+  # A fourth numeric component has nowhere to go: dropping it collides
+  # (pandoc 3.7.0.2 and 3.7.0.3 both -> 3.7.0) and every fold that avoids
+  # the collision has to cover the package's whole version history to stay
+  # monotone, which only the package knows. So refuse, and make it declare a
+  # rule in passthru.wasmer.version.
+  toSemver = pname: v: let
     digits = builtins.filter (s: builtins.isString s && s != "") (builtins.split "[^0-9]+" v);
     canonical = map (d: toString (lib.toIntBase10 d)) digits;
-    padded = lib.take 3 (canonical ++ ["0" "0" "0"]);
   in
-    lib.concatStringsSep "." padded;
+    if builtins.length canonical > 3
+    then
+      throw ''
+        ${pname}: upstream version "${v}" has ${toString (builtins.length canonical)} numeric components; semver takes 3.
+        Truncating would collide with sibling releases, so declare a rule:
+          passthru.wasmer.version = v: ...;   # upstream version -> MAJOR.MINOR.PATCH
+        It must be monotone over every version this package has published.
+      ''
+    else lib.concatStringsSep "." (lib.take 3 (canonical ++ ["0" "0" "0"]));
 
   # Publication release numbers (rels.json at the repo root): keyed by attr
   # path then upstream version, so an upstream bump resets to 1 by key miss.
@@ -49,7 +63,13 @@
     # the wasinix namespace does not exist on wasmer.io yet; publish under
     # kilyanni until it does
     owner = pw.owner or "kilyanni";
-    baseVersion = pw.version or (toSemver (p.version or "0.0.0"));
+    upstreamVersion = p.version or "0.0.0";
+    baseVersion =
+      if !(pw ? version)
+      then toSemver name upstreamVersion
+      else if builtins.isFunction pw.version
+      then pw.version upstreamVersion
+      else throw "${name}: passthru.wasmer.version must be a function of the upstream version, not a literal; a literal freezes the published version across bumps";
     rel = (rels."wasmerPackages.${name}" or {}).${baseVersion} or 1;
     # no version encoding for rels works on the registry yet (WASIX-TODO.md:
     # build metadata is normalized away, prereleases hide from latest); the
