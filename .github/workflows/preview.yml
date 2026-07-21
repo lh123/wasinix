@@ -169,6 +169,10 @@ jobs:
           INDEX_URL: ${{ steps.index.outputs.url }}
         run: |
           {
+            # marker-based upsert, same pattern as post-report.js: --edit-last
+            # would clobber whichever bot comment happens to be newest (the CI
+            # report)
+            echo "<!-- wasinix-preview -->"
             echo "### PR preview (\`$TAG\`)"
             if [ "$(jq '.webcs | length' diff.json)" != 0 ]; then
               echo
@@ -181,11 +185,16 @@ jobs:
               prod=$(nix shell .#wasmer-bin -c wasmer app get kilyanni/python-registry \
                 --registry "$WASMER_REGISTRY" --format json | jq -r '.url // empty' || true)
               echo
-              echo "Wheel overlay index (preferred over the published wheels by version):"
+              echo "Wheel overlay [index]($INDEX_URL), preferred over the published wheels by version:"
               echo '```'
               echo "pip install --index-url $INDEX_URL/simple --extra-index-url ${prod:-<prod index>}/simple <pkg>"
               echo '```'
             fi
           } >comment.md
-          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --body-file comment.md \
-            || gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md
+          cid=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.body | startswith("<!-- wasinix-preview -->"))][0].id // empty')
+          if [ -n "$cid" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$cid" -F body=@comment.md >/dev/null
+          else
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md
+          fi
