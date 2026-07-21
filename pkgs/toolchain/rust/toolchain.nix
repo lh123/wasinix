@@ -256,7 +256,9 @@ in
       # marks them unsupported in the profiles rust can't target (off/exnref*).
       supportedProfiles = ["eh"] ++ optionals withDynamicLinking ["ehpic"];
 
-      updateScript = nix-update-script {extraArgs = ["--flake"];};
+      # bumps, then re-derives the stage0 bootstrap pin from the new tag's
+      # src/stage0 (the nix-update command is passed through as its argv)
+      updateScript = ["pkgs/toolchain/rust/update.py"] ++ nix-update-script {extraArgs = ["--flake"];};
 
       wasix.updateNotes = [
         {message = "libc-patch-crates-io.patch is vendored pending upstream; drop it and library.Cargo.lock once the tag includes the fix, else re-apply and regenerate the lock";}

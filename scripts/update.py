@@ -3,9 +3,11 @@
 # package as passthru.updateScript (nix-update-script), discovered by eval;
 # this script only drives:
 # it runs each target isolated, adds the flake-input targets (which have no
-# package file), runs the cross-file regen hooks after a bump (the rust fork's
-# stage0 bootstrap pin, wasix-libc's witx submodule pins), and reports the
-# summary plus fired updateNotes.
+# package file), runs the two repo-wide steps a bump implies (retain the
+# outgoing major in the registry-history tables, prune rels.json keys nothing
+# serves), and reports the summary plus fired updateNotes.
+# A pin derived from another pin belongs to its package: see
+# pkgs/toolchain/rust/update.py and pkgs/toolchain/sysroot/update.py.
 #
 # Usage (or `nix run .#scripts.update -- ...`):
 #   scripts/update.py              # update everything
@@ -20,61 +22,10 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from urllib import request
+
+from updater_lib import REPO, gh, prefetch_url, run  # noqa: F401
 
 SYSTEM = "x86_64-linux"
-
-
-def run(cmd, **kw):
-    print(f"  $ {' '.join(cmd)}", file=sys.stderr)
-    p = subprocess.run(cmd, text=True, capture_output=True, **kw)
-    if p.returncode != 0:
-        raise RuntimeError(
-            f"{cmd[0]} exited {p.returncode}:\n{(p.stderr or p.stdout).strip()}"
-        )
-    return p
-
-
-def repo_root():
-    # Prefer the git working tree: under `nix run .#scripts.update` this file lives in the
-    # store, but the pins we edit are in the checkout `nix run` was invoked from.
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
-            check=True,
-            text=True,
-            capture_output=True,
-        )
-        return Path(out.stdout.strip())
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return Path(__file__).resolve().parent.parent
-
-
-REPO = repo_root()
-
-
-def gh(path):
-    req = request.Request(f"https://api.github.com/repos/{path}")
-    req.add_header("Accept", "application/vnd.github+json")
-    with request.urlopen(req) as r:
-        return json.load(r)
-
-
-def prefetch_github(owner, repo, rev):
-    url = f"https://github.com/{owner}/{repo}/archive/{rev}.tar.gz"
-    out = run(["nix", "store", "prefetch-file", "--json", "--unpack", url])
-    return json.loads(out.stdout)["hash"]
-
-
-def prefetch_url(url):
-    out = run(["nix", "store", "prefetch-file", "--json", url])
-    return json.loads(out.stdout)["hash"]
-
-
-def raw_file(owner, repo, rev, path):
-    url = f"https://raw.githubusercontent.com/{owner}/{repo}/{rev}/{path}"
-    with request.urlopen(url) as r:
-        return r.read().decode()
 
 
 @dataclass
@@ -87,72 +38,6 @@ class Target:
     attr: str = ""
     command: tuple = ()
     file: str = ""  # repo-relative pin file, from meta.position
-
-
-def regen_rust_bootstrap(t):
-    # The rust fork's vendoring auto-tracks the src lockfiles (no FOD hash), so
-    # the only pin that can drift is the stage0 bootstrap compiler; sync
-    # version, url, and hash from the fork's src/stage0.
-    path = REPO / "pkgs/toolchain/rust/toolchain.nix"
-    text = path.read_text()
-    version = re.search(r'version = "([^"]+)"', text).group(1)
-    stage0 = raw_file("wasix-org", "rust", f"v{version}", "src/stage0")
-    kv = dict(re.findall(r"^(\w+)=(.+)$", stage0, re.M))
-    date, ver, server = kv["compiler_date"], kv["compiler_version"], kv["dist_server"]
-
-    cur = re.search(
-        r'pname = "rust-bootstrap";\s*\n\s*version = "([^"]+)"', text
-    ).group(1)
-    if cur == ver:
-        return None
-
-    url_literal = f"{server}/dist/{date}/rust-{ver}-${{hostTriple}}.tar.xz"
-    new_hash = prefetch_url(
-        f"{server}/dist/{date}/rust-{ver}-x86_64-unknown-linux-gnu.tar.xz"
-    )
-    old_hash = re.search(
-        r'rust-bootstrap";.*?(sha256-[A-Za-z0-9+/=]+)', text, re.S
-    ).group(1)
-
-    text = re.sub(
-        r'(pname = "rust-bootstrap";\s*\n\s*version = ")[^"]+(")',
-        rf"\g<1>{ver}\g<2>",
-        text,
-    )
-    text = re.sub(r'url = "[^"]*rust-[^"]*\.tar\.xz";', f'url = "{url_literal}";', text)
-    text = text.replace(old_hash, new_hash, 1)
-    path.write_text(text)
-    return f"synced rust bootstrap -> {ver} ({date})"
-
-
-def regen_libc_witx(t):
-    # libc.nix pins the wasi/wasix witx specs (git submodules of wasix-libc)
-    # separately from the libc src. A stale pin fails the libc build with
-    # undeclared __wasi_* functions, so sync each pin to the submodule rev at
-    # the new tag.
-    path = REPO / "pkgs/toolchain/sysroot/libc.nix"
-    text = path.read_text()
-    tag = "v" + re.search(r'\bversion = "([^"]+)"', text).group(1)
-    bumped = []
-    for sub, owner, repo in [
-        ("tools/wasi-headers/WASI", "WebAssembly", "WASI"),
-        ("tools/wasix-headers/WASI", "wasix-org", "wasix-witx"),
-    ]:
-        sha = gh(f"wasix-org/wasix-libc/contents/{sub}?ref={tag}")["sha"]
-        m = re.search(
-            rf'repo = "{repo}";\s*\n\s*rev = "([^"]+)";\s*\n\s*hash = "([^"]+)"', text
-        )
-        if not m:
-            raise RuntimeError(f"{repo}: witx pin block not found in libc.nix")
-        if m.group(1) == sha:
-            continue
-        new_hash = prefetch_github(owner, repo, sha)
-        text = text.replace(m.group(1), sha, 1).replace(m.group(2), new_hash, 1)
-        bumped.append(f"{repo} -> {sha[:12]}")
-    if not bumped:
-        return None
-    path.write_text(text)
-    return "witx pins: " + ", ".join(bumped)
 
 
 def prune_rels():
@@ -283,7 +168,7 @@ def regen_history():
             report = (p.stdout or p.stderr).strip().splitlines()
             last = report[-1] if report else f"history.py exited {p.returncode}"
             # A failed append must not pass as a result: prune_rels runs after
-            # the regens and drops the outgoing version's rel key once nothing
+            # retention and drops the outgoing version's rel key once nothing
             # serves it, which is exactly what this hook exists to prevent.
             if p.returncode != 0:
                 failed.append(f"{attr}=={prior}: {last}")
@@ -293,14 +178,6 @@ def regen_history():
         raise RuntimeError("; ".join(failed))
     return "; ".join(lines) if lines else None
 
-
-# Cross-file regen hooks, keyed by target name: they synchronize other repo
-# files with the new pin, which is driver logic, not package logic. What to
-# bump and how lives in each package as passthru.updateScript.
-REGEN_BY_NAME = {
-    "rust-toolchain": regen_rust_bootstrap,
-    "wasix-libc": regen_libc_witx,
-}
 
 # Flake inputs (flake.lock) have no package file to carry an updateScript.
 # Each is its own target so `--only nixpkgs` works like a package; nixpkgs
@@ -476,18 +353,6 @@ def main():
         any_changed = any_changed or changed
         if outcome is None:
             outcome = "updated" if changed else "up to date"
-        # Run the regen only on an actual bump (the working tree changed).
-        regen = REGEN_BY_NAME.get(t.name)
-        if regen and changed:
-            try:
-                summary = regen(t)
-                print(f"  regen: {summary or 'no derived changes'}")
-                if summary:
-                    outcome += f"; {summary}"
-            except Exception as e:
-                print(f"  regen FAILED: {e}")
-                failures.append(f"{t.name} (regen)")
-                outcome += f"; regen FAILED: {str(e).splitlines()[0][:120]}"
         results.append((t.name, outcome))
 
     # Retain before pruning: prune_rels drops the rel key of any version no

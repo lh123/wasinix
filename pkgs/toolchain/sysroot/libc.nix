@@ -90,7 +90,9 @@ in
 
     passthru.updateScript = {
       name = "wasix-libc"; # attr tail is `libc`; keep the familiar target name
-      command = nix-update-script {extraArgs = ["--flake"];};
+      # bumps, then re-derives the witx submodule pins at the new tag (the
+      # nix-update command is passed through as its argv)
+      command = ["pkgs/toolchain/sysroot/update.py"] ++ nix-update-script {extraArgs = ["--flake"];};
     };
 
     nativeBuildInputs = [
