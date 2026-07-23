@@ -25,7 +25,10 @@
   wasixccUnwrapped = rustPlatform.buildRustPackage {
     pname = "wasixcc-unwrapped";
     inherit version src;
-    cargoLock.lockFile = "${src}/Cargo.lock";
+    # Vendored by fetchCargoVendor, which reads the in-source lockfile at build
+    # time; `cargoLock.lockFile = "${src}/Cargo.lock"` would read it during eval
+    # (import-from-derivation), forcing the fetch before any attr can be listed.
+    cargoHash = "sha256-JBuSAfDv1MlZt2tXR6bh+4ZlzH6joFjD5JXH+ZuuD+A=";
 
     patches = [
       # The no-input passthrough runs clang without pinning the linker, so probes
@@ -79,8 +82,7 @@ in
       # nix-update needs version + src on the drv it evals: the wrapper has
       # neither, so point it at the unwrapped package
       updateScript = {
-        # --src-only: the lockfile is in-source, nothing vendored to update
-        command = nix-update-script {extraArgs = ["--flake" "--src-only"];};
+        command = nix-update-script {extraArgs = ["--flake"];};
         attrPath = "toolchain.wasixcc.unwrapped";
       };
       wasix.updateNotes = [

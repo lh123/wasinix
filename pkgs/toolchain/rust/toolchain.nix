@@ -16,8 +16,6 @@
   fetchFromGitHub,
   fetchurl,
   runCommand,
-  linkFarm,
-  formats,
   rustPlatform,
   nix-update-script,
   autoPatchelfHook,
@@ -78,18 +76,39 @@
     '';
   };
 
-  # Offline cargo registry for every workspace x.py compiles, each with its own
-  # lockfile. vendor.nix vendors each and produces one source-replacement config;
-  # crates-io and the cc-rs/libc git forks are vendored separately (vendor.nix
-  # explains why the split is required).
-  vendor = import ./vendor.nix {inherit lib rustPlatform linkFarm formats;} [
-    "${src}/Cargo.lock"
-    # the tag's lock regenerated with libc-patch-crates-io.patch applied;
-    # drop together with the patch
-    ./library.Cargo.lock
-    "${src}/src/tools/cargo/Cargo.lock"
-    "${src}/src/bootstrap/Cargo.lock"
-  ];
+  # Offline cargo registry for every workspace x.py compiles. x.py builds several
+  # workspaces, each with its own lockfile; fetchCargoVendor vendors exactly one,
+  # so merge the four into a union lock (build-time, from the fetched src, so no
+  # import-from-derivation) and vendor that. fetchCargoVendor keys crates by
+  # source, so it splits the two `libc 0.2.183` entries (the WASIX git fork that
+  # std links, the registry copy the host tools use) into separate dirs on its
+  # own; that split is why a single `cargo vendor` / `x vendor` refuses this tree.
+  #
+  # The library lock is the one libc-patch-crates-io.patch rewrites, so patch it
+  # here too, matching what postPatch applies to the build; both read the same
+  # patch, so they can't drift.
+  mergedCargoLock =
+    runCommand "wasix-rust-merged-cargo-lock" {
+      nativeBuildInputs = [python3];
+    } ''
+      mkdir -p work/library/std "$out"
+      cp ${src}/library/Cargo.lock work/library/Cargo.lock
+      cp ${src}/library/Cargo.toml work/library/Cargo.toml
+      cp ${src}/library/std/Cargo.toml work/library/std/Cargo.toml
+      chmod -R +w work/library
+      ( cd work && patch -p1 < ${./libc-patch-crates-io.patch} )
+      python3 ${./merge-cargo-locks.py} "$out/Cargo.lock" \
+        ${src}/Cargo.lock \
+        work/library/Cargo.lock \
+        ${src}/src/tools/cargo/Cargo.lock \
+        ${src}/src/bootstrap/Cargo.lock
+    '';
+
+  cargoVendorDir = rustPlatform.fetchCargoVendor {
+    name = "wasix-rust-toolchain-${version}-vendor";
+    src = mergedCargoLock;
+    hash = "sha256-Cl/JQWb/fUGW+PjOSeY8GZmr6KYLyetzeXqvzQJDVe8=";
+  };
 
   # rust bootstrap's cc_detect.rs looks for a `-wasi` target's C compiler at
   # $WASI_SDK_PATH/bin/<target>-clang[++]; synthesize that layout from the wasix
@@ -112,6 +131,12 @@ in
   stdenv.mkDerivation {
     pname = "wasix-rust-toolchain";
     inherit version src;
+
+    # std -> the WASIX libc fork: single-sources library/Cargo.lock's libc so
+    # name+version-keyed vendoring can split it (WASIX-TODO.md, Rust section).
+    # Pending upstream as #19; mergedCargoLock applies the same patch so its
+    # vendored lock matches. Recheck on the next tag bump.
+    patches = [./libc-patch-crates-io.patch];
 
     nativeBuildInputs = [
       python3
@@ -162,12 +187,12 @@ in
     postPatch = ''
       patchShebangs src/etc x.py configure
       ( cd src/llvm-project && patch -p1 < ../../wasix-llvm.patch )
-      # pending upstream: single-source libc in library/Cargo.lock, which
-      # importCargoLock cannot vendor otherwise (WASIX-TODO.md, Rust section)
-      patch -p1 < ${./libc-patch-crates-io.patch}
+      # Install fetchCargoVendor's source-replacement config with @vendor@ bound
+      # to the vendor dir (what cargoSetupHook does for buildRustPackage).
       mkdir -p .cargo
-      cp ${vendor.cargoConfig} .cargo/config.toml
-      ln -s ${vendor.cratesIoVendor} vendor
+      substitute ${cargoVendorDir}/.cargo/config.toml .cargo/config.toml \
+        --subst-var-by vendor ${cargoVendorDir}
+      ln -s ${cargoVendorDir} vendor
     '';
 
     # Drive rust's own ./configure, encoding config.toml.wasix-template: the wasix
@@ -261,7 +286,8 @@ in
       updateScript = ["pkgs/toolchain/rust/update.py"] ++ nix-update-script {extraArgs = ["--flake"];};
 
       wasix.updateNotes = [
-        {message = "libc-patch-crates-io.patch is vendored pending upstream; drop it and library.Cargo.lock once the tag includes the fix, else re-apply and regenerate the lock";}
+        {message = "libc-patch-crates-io.patch is vendored pending upstream; drop it once the tag includes the fix";}
+        {message = "re-hash cargoVendorDir (fetchCargoVendor): nix-update bumps the tag but not the vendor hash; set it to lib.fakeHash and rebuild to get the new value";}
       ];
     };
 

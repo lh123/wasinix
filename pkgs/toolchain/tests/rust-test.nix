@@ -21,13 +21,16 @@
     path = "src/main.rs"
   '';
   # No dependencies, so the lock is just the crate itself (no vendoring needed).
-  cargoLock = writeText "Cargo.lock" ''
+  # Held as a string and passed as lockFileContents; reading it back out of the
+  # built `src` would be import-from-derivation.
+  cargoLockText = ''
     version = 3
 
     [[package]]
     name = "wasix-rust-test"
     version = "0.0.0"
   '';
+  cargoLockFile = writeText "Cargo.lock" cargoLockText;
   mainRs = writeText "main.rs" ''
     fn main() {
         // A heap allocation: forces the startup path that traps on a non-growable
@@ -39,7 +42,7 @@
   src = runCommand "wasix-rust-test-src" {} ''
     mkdir -p "$out/src"
     cp ${cargoToml} "$out/Cargo.toml"
-    cp ${cargoLock} "$out/Cargo.lock"
+    cp ${cargoLockFile} "$out/Cargo.lock"
     cp ${mainRs} "$out/src/main.rs"
   '';
 in
@@ -47,7 +50,7 @@ in
     pname = "wasix-rust-test";
     version = "0.0.0";
     inherit src;
-    cargoLock.lockFile = "${src}/Cargo.lock";
+    cargoLock.lockFileContents = cargoLockText;
 
     # Stock cargo build for wasm32-wasmer-wasi; the install phase runs the wasm
     # under wasmer as the check.
