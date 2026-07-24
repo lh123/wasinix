@@ -4,6 +4,9 @@
 # exnrefEh, else first supported), shipped = packaged as webc (at the
 # preferred profile) instead of built across the librariesByProfile,
 # broken = "reason" for a real defect,
+# retention = registry-history retention when a bump moves this served version:
+# "major" (default) keeps the outgoing latest-per-major rebuildable, "minor"
+# latest-per-minor, "none" opts out (scripts/update.py),
 # updateNotes = [{message; when ? prior: current: ...}] = things to check
 # when the package moves, surfaced by scripts/update.py and the CI report.
 # `when` gets the base branch's version (null when unknown) and the current

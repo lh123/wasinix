@@ -76,9 +76,10 @@ def prune_rels():
 
 
 WHEEL_HISTORY = REPO / "pkgs/overlay/python-packages/history.json"
-# {"wheel": {attr: version}, "cli": {overlay-attr: version}}, current (non-history)
-# versions captured in main() before anything bumps. Raw versions, matching the
-# history.json keys the loader mints from.
+# {"wheel": {attr: info}, "cli": {overlay-attr: info}} where info is
+# {"version", "retention"}, current (non-history) state captured in main()
+# before anything bumps. Raw versions, matching the history.json keys the
+# loader mints from; retention is the package's passthru.wasix.retention.
 history_priors = {}
 
 
@@ -94,13 +95,14 @@ def current_versions():
             "--json",
             f".#legacyPackages.{SYSTEM}.pythonWheels",
             "--apply",
-            "ws: builtins.mapAttrs (_: s: builtins.mapAttrs (_: w: w.version) s) ws",
+            "ws: builtins.mapAttrs (_: s: builtins.mapAttrs (_: w: "
+            "{ version = w.version; retention = w.passthru.wasix.retention or null; }) s) ws",
         ]
     ).stdout
     for versions in json.loads(wout).values():
-        for attr, v in versions.items():
+        for attr, info in versions.items():
             if attr not in whist_keys:
-                result["wheel"].setdefault(attr, v)
+                result["wheel"].setdefault(attr, info)
     # CLIs: non-history wasmerPackages, keyed by overlay attr (the history key)
     cout = run(
         [
@@ -110,30 +112,53 @@ def current_versions():
             f".#legacyPackages.{SYSTEM}.wasmerPackages",
             "--apply",
             "ws: builtins.mapAttrs (_: p: { overlay = p.overlayName; "
-            "history = p.passthru.wasmer.history or false; version = p.version; }) ws",
+            "history = p.passthru.wasmer.history or false; version = p.version; "
+            "retention = p.passthru.wasix.retention or null; }) ws",
         ]
     ).stdout
     for info in json.loads(cout).values():
         if not info["history"]:
-            result["cli"].setdefault(info["overlay"], info["version"])
+            result["cli"].setdefault(
+                info["overlay"],
+                {"version": info["version"], "retention": info["retention"]},
+            )
     return result
 
 
-def crossed_major(prior, now):
-    # Only plain dotted releases have a comparable major. A non-release version
-    # (bash 5.3p9, a 0-unstable-<date> pin) has no major to cross, and treating
-    # its whole string as one would fire on every bump.
+# passthru.wasix.retention: how far down the version a bump must move before the
+# outgoing version is retained. "major" (the default) keeps the last of each
+# major, "minor" the last of each minor, "none" opts a package out entirely.
+# The number is how many leading components define a series.
+RETENTION_LEVELS = {"none": 0, "major": 1, "minor": 2}
+DEFAULT_RETENTION = "major"
+
+
+def retention_crossed(prior, now, level):
+    # Retain the outgoing version when the components down to `level` change.
+    # Only plain dotted releases have comparable components. A non-release
+    # version (bash 5.3p9, a 0-unstable-<date> pin) has no series to cross, and
+    # treating its whole string as one would fire on every bump.
+    n = RETENTION_LEVELS[level]
+    if n == 0:
+        return False
     plain = re.compile(r"\d+(\.\d+)*\Z")
     if not (plain.match(prior) and plain.match(now)):
         return False
-    return prior.split(".")[0] != now.split(".")[0]
+    return prior.split(".")[:n] != now.split(".")[:n]
+
+
+def retention_note(prior, level):
+    n = RETENTION_LEVELS[level]
+    series = ".".join(prior.split(".")[:n])
+    return f"latest {series}.x (outgoing {'major' if n == 1 else 'minor'})"
 
 
 def regen_history():
-    # Retention is latest-per-major: a bump crossing a major leaves the outgoing
-    # version behind in the registry-history table (wheels and CLIs alike), so
-    # pinned consumers keep resolving. Minor-level retention stays a manual
-    # scripts/history.py call.
+    # Retention keeps the outgoing version behind in the registry-history table
+    # (wheels and CLIs alike) so pinned consumers keep resolving. How far a bump
+    # must move to trigger it is the package's passthru.wasix.retention
+    # (default: latest-per-major); "none" opts out (e.g. icu-data, whose majors
+    # are already first-class attrs).
     #
     # Not keyed to a target: what matters is that a SERVED version moved, and a
     # package pinning its own src moves on its own updateScript, not on the
@@ -145,9 +170,20 @@ def regen_history():
     lines = []
     failed = []
     for kind, priors in history_priors.items():
-        for attr, prior in sorted(priors.items()):
-            now = cur[kind].get(attr)
-            if not now or not crossed_major(prior, now):
+        for attr, prior_info in sorted(priors.items()):
+            prior = prior_info["version"]
+            now_info = cur[kind].get(attr)
+            if not now_info:
+                continue
+            now = now_info["version"]
+            policy = now_info.get("retention") or DEFAULT_RETENTION
+            if policy not in RETENTION_LEVELS:
+                failed.append(
+                    f"{attr}: unknown retention policy {policy!r} "
+                    f"(expected one of {', '.join(RETENTION_LEVELS)})"
+                )
+                continue
+            if not retention_crossed(prior, now, policy):
                 continue
             p = subprocess.run(
                 [
@@ -159,7 +195,7 @@ def regen_history():
                     kind,
                     "--skip-unsupported",
                     "--note",
-                    f"latest {prior.split('.')[0]}.x (outgoing major)",
+                    retention_note(prior, policy),
                 ],
                 cwd=REPO,
                 text=True,

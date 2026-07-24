@@ -23,6 +23,10 @@ in {
           license = lib.licenses.icu;
         };
         passthru.wasix.shipped = true;
+        # No auto-retention: each icu major is already a first-class attr
+        # (icu-data${v}), so a pinned major stays served without minting a
+        # history entry when the default alias crosses a major.
+        passthru.wasix.retention = "none";
         passthru.wasmer = {
           commands = [];
           fs."/share/icu/${icu.version}" = "${data}/share/icu/${icu.version}";

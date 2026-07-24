@@ -17,7 +17,9 @@ command is passed through as their argv, so the bump is declared once).
 `scripts/update.py` is only the driver: flake-input targets, per-target
 isolation, the two repo-wide steps a bump implies, and the summary. Those two
 are registry-history retention (keep the outgoing version rebuildable when a
-bump crosses a major) and the rels.json prune (drop keys nothing serves); they
+bump crosses a major, or per `passthru.wasix.retention`: `minor` for
+latest-per-minor, `none` to opt out) and the rels.json prune (drop keys nothing
+serves); they
 run in that order, for every target rather than any one of them, because
 either can move a served version. Retention fetches and hashes the outgoing
 release, so a bump run can do network work beyond the pins themselves (see

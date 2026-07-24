@@ -132,7 +132,9 @@ Maintain the tables with `nix run .#scripts.history`: `add <attr>==<version>`,
 or `--per-major`/`--per-minor` where the source has a version index (PyPI, or
 github tags for a `fetchFromGitHub` package); `--set wheel|cli` disambiguates a
 name in both sets (jq). A nixpkgs bump that crosses a major auto-appends the
-outgoing version, for both sets (`scripts/update.py`). Keep history to what
+outgoing version, for both sets (`scripts/update.py`). A package tunes this with
+`passthru.wasix.retention`: `minor` retains latest-per-minor, `none` opts out
+(icu-data, whose majors are already first-class attrs). Keep history to what
 consumers actually pin: latest per major, occasionally latest per minor.
 
 (icu-style `{names, packages}` families are only for packages nixpkgs itself
