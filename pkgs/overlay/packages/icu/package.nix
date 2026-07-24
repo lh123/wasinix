@@ -62,6 +62,16 @@ in {
   in
     # nixpkgs' `icu` aliases the default icuNN through the fixpoint, so
     # tweaking prev.icu would re-tweak our icuNN. Follow the alias instead.
-    {icu = final."icu${lib.versions.major prev.icu.version}";}
+    # The alias also carries the retentionHook that regenerates versions.nix
+    # from the nixpkgs majors after a bump (passthru only, so drv-neutral).
+    {
+      icu = (final."icu${lib.versions.major prev.icu.version}").overrideAttrs (o: {
+        passthru =
+          (o.passthru or {})
+          // {
+            wasix = (o.passthru.wasix or {}) // {retentionHook = ["pkgs/overlay/packages/icu/sync-versions.py"];};
+          };
+      });
+    }
     // lib.genAttrs (map (v: "icu${v}") versions) (n: tweak prev.${n});
 }

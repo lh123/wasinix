@@ -3,9 +3,10 @@
 # package as passthru.updateScript (nix-update-script), discovered by eval;
 # this script only drives:
 # it runs each target isolated, adds the flake-input targets (which have no
-# package file), runs the two repo-wide steps a bump implies (retain the
-# outgoing major in the registry-history tables, prune rels.json keys nothing
-# serves), and reports the summary plus fired updateNotes.
+# package file), runs the repo-wide steps a bump implies (retain the outgoing
+# major in the registry-history tables, prune rels.json keys nothing serves,
+# then the package-declared retentionHooks), and reports the summary plus fired
+# updateNotes.
 # A pin derived from another pin belongs to its package: see
 # pkgs/toolchain/rust/update.py and pkgs/toolchain/sysroot/update.py.
 #
@@ -263,6 +264,40 @@ def discovered_targets():
     return list(targets.values())
 
 
+def discovered_hooks():
+    # passthru.wasix.retentionHook declarations (flake attr `retentionHooks`),
+    # deduped by command across the per-profile ci attrs. Run after the
+    # repo-wide history/prune steps so a package can re-sync a listing it
+    # derives from the pins.
+    out = run(
+        ["nix", "eval", "--json", f".#legacyPackages.{SYSTEM}.retentionHooks"]
+    ).stdout
+    hooks = {}
+    for attr, h in sorted(json.loads(out).items()):
+        cmd = tuple(h["command"])
+        hooks.setdefault(cmd, attr.rsplit(".", 1)[-1])
+    return [(name, list(cmd)) for cmd, name in hooks.items()]
+
+
+def run_retention_hook(name, command):
+    cmd = list(command)
+    if "/" in cmd[0] and not cmd[0].startswith("/"):
+        cmd[0] = str(REPO / cmd[0])
+    print(f"==> hook: {name}")
+    print(f"  $ {' '.join(command)}", file=sys.stderr)
+    p = subprocess.run(cmd, cwd=REPO, text=True, capture_output=True)
+    sys.stderr.write(p.stderr)
+    out = p.stdout.strip()
+    for line in out.splitlines():
+        print(f"  {line}")
+    if p.returncode != 0:
+        raise RuntimeError(
+            f"{command[0]} exited {p.returncode}:\n{(p.stderr or p.stdout).strip()}"
+        )
+    lines = out.splitlines()
+    return lines[-1] if lines else None
+
+
 # Each backend returns a one-line outcome for the summary (None: let the
 # caller derive it from whether the working tree changed).
 
@@ -414,6 +449,23 @@ def main():
     except Exception as e:
         failures.append("rels prune")
         results.append(("rels", f"FAILED: {str(e).splitlines()[0][:120]}"))
+
+    # Package-declared re-sync, last: a hook regenerates a listing derived from
+    # the pins (icu's versions.nix) once history and prune have settled. Each is
+    # isolated like a target, and reads the pins directly, so a hook can repair
+    # a listing even when a stale one breaks the repo eval.
+    if any_changed:
+        for name, command in discovered_hooks():
+            before = repo_status()
+            try:
+                outcome = run_retention_hook(name, command)
+            except Exception as e:
+                failures.append(f"hook:{name}")
+                results.append((name, f"FAILED: {str(e).splitlines()[0][:120]}"))
+                continue
+            if outcome is None:
+                outcome = "re-synced" if repo_status() != before else "up to date"
+            results.append((name, outcome))
 
     notes = fired_notes(priors)
     for n in notes:

@@ -7,6 +7,9 @@
 # retention = registry-history retention when a bump moves this served version:
 # "major" (default) keeps the outgoing latest-per-major rebuildable, "minor"
 # latest-per-minor, "none" opts out (scripts/update.py),
+# retentionHook = a command scripts/update.py runs after the repo-wide
+# history/prune steps, for a package to re-sync a listing it derives from the
+# pins (icu regenerates versions.nix from the nixpkgs majors),
 # updateNotes = [{message; when ? prior: current: ...}] = things to check
 # when the package moves, surfaced by scripts/update.py and the CI report.
 # `when` gets the base branch's version (null when unknown) and the current

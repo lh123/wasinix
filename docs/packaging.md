@@ -138,7 +138,11 @@ outgoing version, for both sets (`scripts/update.py`). A package tunes this with
 consumers actually pin: latest per major, occasionally latest per minor.
 
 (icu-style `{names, packages}` families are only for packages nixpkgs itself
-carries at multiple versions, not for minting historical ones.)
+carries at multiple versions, not for minting historical ones. Their major list
+tracks nixpkgs: icu declares `passthru.wasix.retentionHook =
+["…/sync-versions.py"]`, which `scripts/update.py` runs after a bump to
+regenerate `icu/versions.nix` from the majors the pinned nixpkgs actually
+carries.)
 
 ## PR previews
 

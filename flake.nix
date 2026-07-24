@@ -350,6 +350,39 @@
             else {};
         in
           lib.concatMapAttrs scriptOf ci;
+
+        # passthru.wasix.retentionHook (see pkgs/lib/default.nix): a command
+        # scripts/update.py runs after the repo-wide history/prune steps, for a
+        # package to re-sync a listing it derives from the pins (icu regenerates
+        # versions.nix from the nixpkgs majors). In-tree only; the driver
+        # dedupes the per-profile repeats by command.
+        retentionHooks = let
+          srcRoot = toString self;
+          hookOf = attr: drv: let
+            h = (drv.passthru.wasix or {}).retentionHook or null;
+            command =
+              if h == null
+              then null
+              else map toString (lib.toList h);
+            pos = builtins.unsafeGetAttrPos "wasix" (drv.passthru or {});
+            ours =
+              command
+              != null
+              && command != []
+              && pos != null
+              && lib.hasPrefix srcRoot pos.file;
+            entry = builtins.tryEval (
+              let
+                v = lib.optionalAttrs ours {${attr} = {inherit command;};};
+              in
+                builtins.deepSeq v v
+            );
+          in
+            if entry.success
+            then entry.value
+            else {};
+        in
+          lib.concatMapAttrs hookOf ci;
       };
 
     devShells.${system}.default = wasix.pkgs.mkShell {
