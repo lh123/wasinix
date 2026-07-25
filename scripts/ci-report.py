@@ -100,6 +100,9 @@ def local_log(drv):
         ["nix", "log", "--option", "substituters", "", drv],
         capture_output=True,
         text=True,
+        # build logs aren't guaranteed UTF-8 (a builder can emit binary/gzip
+        # bytes); decode lossily so one bad byte can't abort the whole report.
+        errors="replace",
     )
     # log exists but is unreadable: still a direct failure, just no excerpt
     return p.stdout if p.returncode == 0 else ""
