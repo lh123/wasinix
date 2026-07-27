@@ -463,9 +463,11 @@ def main():
                 failures.append(f"hook:{name}")
                 results.append((name, f"FAILED: {str(e).splitlines()[0][:120]}"))
                 continue
-            if outcome is None:
-                outcome = "re-synced" if repo_status() != before else "up to date"
-            results.append((name, outcome))
+            # Report only when the hook changed something; its no-op line (icu's
+            # "versions.nix up to date") still prints to the log but would be
+            # noise in the summary on every PR, unlike history/rels above.
+            if repo_status() != before:
+                results.append((name, outcome or "re-synced"))
 
     notes = fired_notes(priors)
     for n in notes:
