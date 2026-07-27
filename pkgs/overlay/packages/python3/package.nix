@@ -22,9 +22,20 @@
       py =
         helpers.libTweaks {
           passthru.wasix.shipped = true;
+          configureFlags = [
           # Enables importing .so C-extension wheels (needs enable-wasm-dynamic-linking-wasi.patch;
           # ehpic is already -pie, so no extra link flags).
-          configureFlags = ["--enable-wasm-dynamic-linking"];
+            "--enable-wasm-dynamic-linking"
+            # nixpkgs presets ac_cv_x87_double_rounding=yes for EVERY cross build,
+            # which is an x86-only assumption. x87's 80-bit registers
+            # are what cause double rounding, and wasm32 has no x87, only strict
+            # IEEE 754 binary64. Left at "yes", pycore_pymath.h sets
+            # _PY_SHORT_FLOAT_REPR 0, which drops Python/dtoa.c and prints floats
+            # with %.17g, meaning repr(1.1) becomes 1.1000000000000001. Appended, not
+            # env: configure's command-line assignments beat the environment, and
+            # the last assignment wins, so this is how we beat nixpkgs.
+            "ac_cv_x87_double_rounding=no"
+          ];
 
           # Autoconf cache vars, equivalent to the wasix-org/cpython config.site/configure
           # patches; the build re-runs autoreconf, so fresh probes must see these.
