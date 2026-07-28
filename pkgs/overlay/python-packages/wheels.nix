@@ -109,6 +109,12 @@
     # `google.protobuf` would silently fall back to the python impl).
     pyImport = "google._upb._message";
   }
+  {
+    attr = "protobuf6";
+    # for consumers whose lockfile caps protobuf<7. nixpkgs carries the major
+    # as its own attr, so this is a family attr, not a history.json entry.
+    pyImport = "google._upb._message";
+  }
 
   # ── C extensions with no external C library ────────────────────────────────────
   {attr = "cffi";} # overlay/python-packages/cffi.nix (libffi ffi_closure_alloc)

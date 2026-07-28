@@ -10,6 +10,10 @@
   ...
 }: let
   wheels = import ../lib/wheels.nix {inherit lib;};
+  # 1.75 introduced pyproject.toml; before it the sdist is setup.py only, so
+  # nixpkgs' cython-unpin substitution has no file to patch. The pin it targets
+  # lives in requirements.txt there, which the nix build never consults.
+  noPyproject = lib.versionOlder pyprev.grpcio.version "1.75";
 in
   wheels.onlyOnWasix pyprev.grpcio (
     helpers.libTweaks (
@@ -29,6 +33,7 @@ in
       }
       # protobuf is only an extras dep; keeps the wheel closure protobuf-free
       // wheels.dropInputsByName ["c-ares" "openssl" "zlib" "protobuf"]
+      // lib.optionalAttrs noPyproject {postPatch = _: "";}
     )
     pyprev.grpcio
   )

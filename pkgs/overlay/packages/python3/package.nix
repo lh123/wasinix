@@ -23,8 +23,8 @@
         helpers.libTweaks {
           passthru.wasix.shipped = true;
           configureFlags = [
-          # Enables importing .so C-extension wheels (needs enable-wasm-dynamic-linking-wasi.patch;
-          # ehpic is already -pie, so no extra link flags).
+            # Enables importing .so C-extension wheels (needs enable-wasm-dynamic-linking-wasi.patch;
+            # ehpic is already -pie, so no extra link flags).
             "--enable-wasm-dynamic-linking"
             # nixpkgs presets ac_cv_x87_double_rounding=yes for EVERY cross build,
             # which is an x86-only assumption. x87's 80-bit registers
