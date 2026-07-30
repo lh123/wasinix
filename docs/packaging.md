@@ -87,7 +87,7 @@ loudly; republishing one needs a rel encoding the registry supports, which
 does not exist yet (WASIX-TODO.md). Auth: `wasmer login` or `WASMER_TOKEN`.
 Packages publish in dependency
 order; a webc dependency that is neither published nor part of the run is an
-error. Failures are isolated per package and reported at the end. Webcs publish under `kilyanni/` until the `wasinix` namespace exists on
+error. Failures are isolated per package and reported at the end. Webcs publish under `wasmer/` on
 wasmer.io (the owner default in `make-wasmer-package.nix`). The `publish-webc`
 workflow runs the same script, manual dispatch only, with the `WASMER_TOKEN`
 secret. Provenance rides the package README on the registry: the generated

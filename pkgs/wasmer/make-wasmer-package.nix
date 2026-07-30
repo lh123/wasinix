@@ -6,7 +6,7 @@
 #                 refuses; never a literal, it would freeze across bumps
 #   description ? meta.description
 #   license     ? meta.license (spdxId/shortName)
-#   owner       ? "kilyanni"
+#   owner       ? "wasmer"
 #   commands    ? null  => one command per bin/*.wasm (auto-globbed at build)
 #   commandEnv  ? {}     => { <command> = { ENV = "val"; }; } merged onto a command
 #   fs          ? {}     => mounts, e.g. { "/etc/ssl" = "${cacert}/etc/ssl"; }

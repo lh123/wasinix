@@ -37,9 +37,7 @@
   webcIdent = p: let
     pw = p.passthru.wasmer or {};
     name = pw.name or p.meta.mainProgram or p.pname or p.name;
-    # the wasinix namespace does not exist on wasmer.io yet; publish under
-    # kilyanni until it does
-    owner = pw.owner or "kilyanni";
+    owner = pw.owner or "wasmer";
     upstreamVersion = p.version or "0.0.0";
     baseVersion =
       if !(pw ? version)
