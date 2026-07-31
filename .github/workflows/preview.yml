@@ -39,8 +39,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      WASMER_TOKEN: ${{ secrets.WASMER_TOKEN_DEV }}
-      WASMER_REGISTRY: wasmer.wtf
+      # previews stay on the dev registry: the prerelease versions are
+      # immutable and accumulate
+      REGISTRY: wasmer.wtf
     steps:
       # Both trigger shapes funnel into PR/HEAD_SHA/BASE_REF + a proceed flag:
       # the workflow_run path resolves the PR from the run's head sha and
@@ -97,6 +98,15 @@ jobs:
           # the real head commit, not the merge ref: the preview provenance
           # records a rev consumers can fetch
           ref: ${{ env.HEAD_SHA }}
+
+      - name: Select wasmer registry
+        if: steps.ctx.outputs.proceed == 'true'
+        uses: ./.github/actions/wasmer-registry
+        with:
+          registry: ${{ env.REGISTRY }}
+          token-prod: ${{ secrets.WASMER_TOKEN }}
+          token-staging: ${{ secrets.WASMER_TOKEN_STAGING }}
+          token-dev: ${{ secrets.WASMER_TOKEN_DEV }}
 
       # claims the comment before the long part, so the PR shows the preview
       # is coming (and, on failure, that it was attempted)
@@ -176,7 +186,7 @@ jobs:
           # capture the deploy exit separately: `url=$(... | tail -1)` under
           # bash without pipefail would mask a failed deploy behind tail
           nix run .#scripts.preview-index-deploy --option accept-flake-config true -- \
-            site "wasinix-index-pr${PR}" >deploy.out
+            site "python-registry-pr${PR}" >deploy.out
           url=$(tail -1 deploy.out)
           echo "url=$url" >>"$GITHUB_OUTPUT"
 
@@ -192,12 +202,14 @@ jobs:
               echo
               echo "Webcs on \`$WASMER_REGISTRY\` (failures listed in the workflow log):"
               jq -r --arg t "$TAG" --arg r "$WASMER_REGISTRY" \
-                '.webcs[] | "- `wasmer run kilyanni/\(.name)@\(.version)-\($t) --registry \($r)`"' \
+                '.webcs[] | "- `wasmer run \(.owner)/\(.name)@\(.version)-\($t) --registry \($r)`"' \
                 diff.json
             fi
             if [ -n "$INDEX_URL" ]; then
-              prod=$(nix shell .#wasmer-bin -c wasmer app get kilyanni/python-registry \
-                --registry "$WASMER_REGISTRY" --format json | jq -r '.url // empty' || true)
+              # the prod index the overlay complements lives on wasmer.io
+              # (publish-index.yml), not on the preview registry
+              prod=$(nix shell .#wasmer-bin -c wasmer app get wasmer/python-registry \
+                --registry wasmer.io --format json | jq -r '.url // empty' || true)
               echo
               echo "Wheel overlay [index]($INDEX_URL), preferred over the published wheels by version:"
               echo '```'

@@ -10,7 +10,9 @@ on:
         required: false
         default: ""
       registry:
-        description: Target registry
+        description: >-
+          Target registry: wasmer.io (prod), wasmer.fun (bugtopia/staging),
+          wasmer.wtf (dev)
         required: false
         default: wasmer.io
       dry-run:
@@ -50,13 +52,17 @@ jobs:
           key: nix-flake-inputs-${{ hashFiles('flake.lock') }}
           restore-keys: nix-flake-inputs-
 
+      - name: Select wasmer registry
+        uses: ./.github/actions/wasmer-registry
+        with:
+          registry: ${{ inputs.registry }}
+          token-prod: ${{ secrets.WASMER_TOKEN }}
+          token-staging: ${{ secrets.WASMER_TOKEN_STAGING }}
+          token-dev: ${{ secrets.WASMER_TOKEN_DEV }}
+
       - name: Publish
         env:
-          # tokens are per-registry: WASMER_TOKEN for wasmer.io,
-          # WASMER_TOKEN_DEV for wasmer.wtf (dev)
-          WASMER_TOKEN: ${{ contains(inputs.registry, 'wasmer.wtf') && secrets.WASMER_TOKEN_DEV || secrets.WASMER_TOKEN }}
           PACKAGES: ${{ inputs.packages }}
-          REGISTRY: ${{ inputs.registry }}
           DRY_RUN: ${{ inputs.dry-run }}
         run: |
           if [ -z "$WASMER_TOKEN" ] && [ "$DRY_RUN" != "true" ]; then
@@ -67,5 +73,5 @@ jobs:
           [ "$DRY_RUN" = "true" ] && args+=(--dry-run)
           # shellcheck disable=SC2086
           nix run .#scripts.publish-webc --option accept-flake-config true -- \
-            --registry "$REGISTRY" --rev "$GITHUB_SHA" \
+            --registry "$WASMER_REGISTRY" --rev "$GITHUB_SHA" \
             "${args[@]}" $PACKAGES

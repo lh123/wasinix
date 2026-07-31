@@ -18,8 +18,7 @@ permissions:
   id-token: write
 
 env:
-  # dev registry/Edge for now, to try the volume publish end to end
-  WASMER_REGISTRY: wasmer.wtf
+  REGISTRY: wasmer.io
 
 jobs:
   publish:
@@ -32,7 +31,7 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     env:
       # the app itself is resolved from pkgs/python-registry/app.yaml (app_id)
-      INDEX_VOLUME: python-index
+      INDEX_VOLUME: index
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,19 +40,14 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       # A single wasmer namespace token; the job fetches the volume's S3
-      # credentials at runtime (provisioning them on the first run). Tokens
-      # are per-registry: WASMER_TOKEN for wasmer.io, WASMER_TOKEN_DEV for
-      # wasmer.wtf (dev), derived from WASMER_REGISTRY so the pair cannot
-      # drift (GH expressions cannot read `env` in job-level env). Via
-      # GITHUB_ENV so the publish step's condition sees whether it is set.
-      - name: Select registry token
-        env:
-          TOKEN_PROD: ${{ secrets.WASMER_TOKEN }}
-          TOKEN_DEV: ${{ secrets.WASMER_TOKEN_DEV }}
-        run: |
-          token="$TOKEN_PROD"
-          case "$WASMER_REGISTRY" in *wasmer.wtf*) token="$TOKEN_DEV" ;; esac
-          echo "WASMER_TOKEN=$token" >>"$GITHUB_ENV"
+      # credentials at runtime (provisioning them on the first run).
+      - name: Select wasmer registry
+        uses: ./.github/actions/wasmer-registry
+        with:
+          registry: ${{ env.REGISTRY }}
+          token-prod: ${{ secrets.WASMER_TOKEN }}
+          token-staging: ${{ secrets.WASMER_TOKEN_STAGING }}
+          token-dev: ${{ secrets.WASMER_TOKEN_DEV }}
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31.9.1
@@ -75,9 +69,6 @@ jobs:
 
       - name: Publish wheels to the index volume
         if: env.WASMER_TOKEN != ''
-        # This step is currently broken, due to an issue with Edge's S3 implementation.
-        # Until then, don't fail on publish errors, so that the GH Pages deployment still fires.
-        continue-on-error: true
         run: |
           nix run .#scripts.publish-index -- \
             --registry "$(readlink -f registry-result)" \

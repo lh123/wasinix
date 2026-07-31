@@ -30,7 +30,7 @@ done
 }
 
 # which wasmer registry to fetch the volume's S3 creds from (wasmer.io = prod,
-# wasmer.wtf = dev)
+# wasmer.fun = bugtopia/staging, wasmer.wtf = dev)
 wasmer_registry="${WASMER_REGISTRY:-wasmer.io}"
 
 block=$(mktemp)

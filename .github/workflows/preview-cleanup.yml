@@ -19,12 +19,20 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      WASMER_TOKEN: ${{ secrets.WASMER_TOKEN_DEV }}
-      WASMER_REGISTRY: wasmer.wtf
+      # preview apps live on the dev registry (preview.yml)
+      REGISTRY: wasmer.wtf
       PR: ${{ github.event.pull_request.number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Select wasmer registry
+        uses: ./.github/actions/wasmer-registry
+        with:
+          registry: ${{ env.REGISTRY }}
+          token-prod: ${{ secrets.WASMER_TOKEN }}
+          token-staging: ${{ secrets.WASMER_TOKEN_STAGING }}
+          token-dev: ${{ secrets.WASMER_TOKEN_DEV }}
 
       - name: Install Nix
         uses: cachix/install-nix-action@v31.9.1
@@ -44,5 +52,5 @@ jobs:
       - name: Delete app
         run: |
           nix shell .#wasmer-bin --accept-flake-config -c wasmer app delete \
-            "kilyanni/wasinix-index-pr${PR}" --registry "$WASMER_REGISTRY" --non-interactive \
+            "wasmer/python-registry-pr${PR}" --registry "$WASMER_REGISTRY" --non-interactive \
             || echo "no preview app to delete"

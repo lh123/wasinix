@@ -28,11 +28,12 @@ def dists(flake: str) -> dict[str, dict]:
     return {d["attr"]: d for d in json.loads(ev(flake, "pythonRegistry.distsJson"))}
 
 
-# attr is the wasmerPackages key (jq-1.6.0 for history entries), name the
-# webc name it publishes under (jq)
+# attr is the wasmerPackages key (jq-1.6.0 for history entries), owner/name
+# the ident it publishes under (wasmer/jq)
 WEBC_DRVS = (
     "ws: builtins.mapAttrs (_: p: "
-    "{drv = p.pkg.drvPath; name = p.pkg.id.name; version = p.pkg.id.baseVersion;}) ws"
+    "{drv = p.pkg.drvPath; owner = p.pkg.id.owner; name = p.pkg.id.name; "
+    "version = p.pkg.id.baseVersion;}) ws"
 )
 
 
@@ -50,7 +51,7 @@ def main() -> None:
     head_w = ev(".", "wasmerPackages", WEBC_DRVS)
     base_w = ev(base, "wasmerPackages", WEBC_DRVS)
     webcs = [
-        {"attr": a, "name": w["name"], "version": w["version"]}
+        {"attr": a, "owner": w["owner"], "name": w["name"], "version": w["version"]}
         for a, w in sorted(head_w.items())
         if base_w.get(a, {}).get("drv") != w["drv"]
     ]
