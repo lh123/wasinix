@@ -3,6 +3,6 @@ name: python-registry
 owner: wasmer
 package: wasmer/static-web-server
 volumes:
-- name: index
-  mount: /public
+  - name: index
+    mount: /public
 app_id: da_RMMIrt4UYeW8
