@@ -12,8 +12,18 @@
   # every normal eval; nothing that ships may set it.
   spotOverlays ? {},
 }: let
-  pkgs = import nixpkgs {inherit system;};
+  pkgs = import nixpkgs {
+    inherit system;
+    overlays = [
+      (_: prev: {
+        nix-update = prev.nix-update.overrideAttrs (old: {
+          patches = (old.patches or []) ++ [./nix-update-read-write-eval.patch];
+        });
+      })
+    ];
+  };
   inherit (pkgs) lib;
+  nixUpdate = pkgs.nix-update;
   wasixLib = import ./lib {inherit lib;};
   toolchain = import ./toolchain {inherit pkgs ghcWasm;};
 
@@ -287,7 +297,7 @@
     pythonWebc = wasmerLayer.wasmerPackages.python.shim;
   };
 in {
-  inherit pkgs pkgsCross defaultProfileName wasixPkgNames;
+  inherit pkgs pkgsCross nixUpdate defaultProfileName wasixPkgNames;
   inherit toolchain toolchainByProfile nixpkgsByProfile preferredProfilePackages allWasmerPackages;
   inherit shippedCommands wasmerPackages librariesByProfile toolchainTestPkgs abiChecks;
   inherit pythonWheels pythonRegistry cargoRegistry;

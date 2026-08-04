@@ -272,7 +272,7 @@
           history = run "history" [] "python3" "history.py";
           preview-diff = run "preview-diff" [] "python3" "preview-diff.py";
           preview-index-deploy = run "preview-index-deploy" [wasmerRuntime p.jq] "bash" "preview-index-deploy.sh";
-          update = run "update" [p.nix-update p.nix-prefetch-git p.cargo] "python3" "update.py";
+          update = run "update" [wasix.nixUpdate p.nix-prefetch-git p.cargo] "python3" "update.py";
           # Runs the wasix server (overlay package) under wasmer, seeded from the
           # fresh mint; cargo relocks/builds against the local instance.
           cargo-registry-serve = run "cargo-registry-serve" [p.nixVersions.latest p.cargo wasmerRuntime] "python3" "cargo-registry-serve.py";
@@ -326,12 +326,25 @@
           srcRoot = toString self;
           scriptOf = attr: drv: let
             s = drv.passthru.updateScript or null;
-            command =
+            commandValues =
               if lib.isList s
-              then map toString s
+              then s
               else if lib.isAttrs s && s ? command
-              then map toString (lib.toList s.command)
+              then lib.toList s.command
               else null;
+            command =
+              if commandValues == null
+              then null
+              else map toString commandValues;
+            commandDrvPaths =
+              if commandValues == null
+              then null
+              else
+                map (v:
+                  if lib.isDerivation v
+                  then v.drvPath
+                  else null)
+                commandValues;
             # prev.X packages inherit nixpkgs' updateScripts, which must not
             # run against this repo; ours are the ones declared in this tree.
             # Registry-history attrs (numpy_2_1_3) re-import the package file, so
@@ -349,7 +362,7 @@
               let
                 v = lib.optionalAttrs ours {
                   ${attr} =
-                    {inherit command;}
+                    {inherit command commandDrvPaths;}
                     // lib.optionalAttrs (lib.isAttrs s && s ? name) {inherit (s) name;}
                     // lib.optionalAttrs (lib.isAttrs s && s ? attrPath) {inherit (s) attrPath;}
                     // {position = drv.meta.position or null;};

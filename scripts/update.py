@@ -38,6 +38,7 @@ class Target:
     # updateScript (passthru.updateScript, discovered by eval):
     attr: str = ""
     command: tuple = ()
+    command_drv_paths: tuple = ()
     file: str = ""  # repo-relative pin file, from meta.position
 
 
@@ -262,6 +263,7 @@ def discovered_targets():
             # behind a wrapper), else the attr the declaration was found on
             attr=f"legacyPackages.{SYSTEM}.{s.get('attrPath') or attr}",
             command=tuple(s["command"]),
+            command_drv_paths=tuple(s["commandDrvPaths"]),
             file=repo_relative(pos.rsplit(":", 1)[0]) if pos else "",
         )
     return list(targets.values())
@@ -313,7 +315,9 @@ def run_update_script(t):
         cmd[0] = str(REPO / cmd[0])
     # store-path commands (nix-update-script) may not be realized here
     if cmd[0].startswith("/nix/store/") and not os.path.exists(cmd[0]):
-        run(["nix-store", "--realise", "/".join(cmd[0].split("/")[:4])])
+        drv_path = t.command_drv_paths[0]
+        path = drv_path or "/".join(cmd[0].split("/")[:4])
+        run(["nix-store", "--realise", path])
     env = os.environ.copy()
     env["UPDATE_NIX_ATTR_PATH"] = t.attr
     if t.file:
