@@ -306,6 +306,13 @@
             commandDrvPaths =
               if commandValues == null
               then null
+              else if lib.isAttrs s && s ? commandDrvPaths
+              then
+                map (v:
+                  if lib.isDerivation v
+                  then v.drvPath
+                  else toString v)
+                (lib.toList s.commandDrvPaths)
               else
                 map (v:
                   if lib.isDerivation v

@@ -42,23 +42,14 @@
   updateScript = final.buildPackages.writeShellApplication {
     name = "wasix-cargo-registry-update";
     runtimeInputs = [
-      final.buildPackages.git
-      final.buildPackages.curl
-      final.buildPackages.gnugrep
       (final.buildPackages.python3.withPackages (ps: [ps.tomlkit]))
     ];
     text = ''
       pkg=$(git rev-parse --show-toplevel)/pkgs/overlay/packages/cargo-registry
-
-      "$@"
-
-      rev=$(grep -m1 -oE '[0-9a-f]{40}' "$pkg/package.nix")
-      curl -sSfL "https://raw.githubusercontent.com/wasix-org/cargo-registry/$rev/Cargo.lock" \
-        | python3 "$pkg/derive-lock.py" /dev/stdin > "$pkg/Cargo.lock"
-
-      "$@" --version=skip
+      PYTHONDONTWRITEBYTECODE=1 python3 "$pkg/update.py" "$@"
     '';
   };
+  updateArgs = nix-update-script {extraArgs = ["--flake"];};
 in
   final.rustPlatform.buildRustPackage {
     pname = "wasix-cargo-registry";
@@ -74,7 +65,10 @@ in
         shipped = true;
         retention = "none";
       };
-      updateScript = ["${updateScript}/bin/wasix-cargo-registry-update"] ++ nix-update-script {extraArgs = ["--flake"];};
+      updateScript = {
+        command = ["${updateScript}/bin/wasix-cargo-registry-update"] ++ updateArgs;
+        commandDrvPaths = [updateScript] ++ map (_: null) updateArgs;
+      };
     };
 
     meta = {
