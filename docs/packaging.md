@@ -187,14 +187,24 @@ python versions (the cp tag keeps filenames distinct). Bump it to republish a
 changed build, with `nix run .#scripts.bump-rel` or the manual `bump-rel.yml`
 workflow (takes a list of packages, opens a PR); an upstream version bump
 resets it by key miss (`nix run .#scripts.update` drops the stale key).
-Published filenames are immutable and accumulate. Webc rels land in
+For a deliberate whole-registry rebuild, use `nix run .#scripts.bump-rel --
+--all-versions 'pythonRegistry.wheels.*'`; the flag also bumps every served
+history version, so it remains explicit.
+Published filenames are immutable and accumulate. A normal registry rebuild can
+change the bytes of an existing filename through a nixpkgs, toolchain, or
+runtime update; the volume keeps its original artifact in that case. Bump the
+rel only when that rebuilt wheel is itself a release. GitHub Pages is different:
+it is always deployed from the fresh `.#pythonRegistry` result, so it is a
+bleeding-edge snapshot and may serve new bytes under an existing filename. Use
+the volume-backed index for immutable, reproducible installs. Webc rels land in
 `[package.metadata] wasix-rel` only for now: the registry has no version
 encoding for republishing (WASIX-TODO.md), so a bumped webc still cannot
 republish. The `publish-index` workflow (on a green Build of
 main) builds the patched wasmer, fetches the volume's S3 credentials with the
 `WASMER_TOKEN` secret (provisioning them on the first run via the vendored
-`rotateS3Credentials` fix), pushes new wheels with `publish.py`, and deploys a
-snapshot to GitHub Pages. The Edge app serving the volume is
+`rotateS3Credentials` fix), pushes only new wheel filenames with `publish.py`,
+and deploys the fresh snapshot to GitHub Pages even if volume publication
+fails. The Edge app serving the volume is
 `python-registry/app.yaml` (static-web-server, deployed once by hand).
 
 Each wheel's `manifests/<wheel>.json` (served from the volume) records its

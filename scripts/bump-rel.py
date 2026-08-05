@@ -6,14 +6,14 @@ upstream version, default 1), so the next publish republishes it under a new
 version. Use after a rebuild changes contents at the same upstream version,
 which both publishers otherwise refuse to overwrite.
 
-Usage: bump-rel.py <key>[==<version>] [<key>[==<version>] ...]
+Usage: bump-rel.py [--all-versions] <key>[==<version>] [<key>[==<version>] ...]
 Keys are rels.json attr paths (pythonRegistry.wheels.numpy, wasmerPackages.git,
 cargoRegistry.crates.tokio), bare names unique across the prefixes (numpy, git,
 tokio), or fnmatch globs over either form ('pythonRegistry.wheels.tok*',
 'icu-data*'); quote globs from the shell. A package serving several versions
 (registry history, or a crate with several minted upstreams) needs the
 ==<version> selector; bumping all of a package's versions stays a deliberate
-per-version act.
+per-version act unless --all-versions is passed.
 """
 
 import fnmatch
@@ -50,8 +50,15 @@ def resolve(name: str, versions: dict[str, list[str]]) -> list[str]:
 
 def main():
     names = sys.argv[1:]
+    all_versions = False
+    if names[:1] == ["--all-versions"]:
+        all_versions = True
+        names = names[1:]
     if not names:
-        sys.exit("usage: bump-rel.py <key>[==<version>] [<key>[==<version>] ...]")
+        sys.exit(
+            "usage: bump-rel.py [--all-versions] "
+            "<key>[==<version>] [<key>[==<version>] ...]"
+        )
 
     repo = Path(
         subprocess.run(
@@ -93,6 +100,9 @@ def main():
                         f"{key}=={picked}: not served (has {', '.join(sorted(served))})"
                     )
                 targets[(key, picked)] = None
+            elif all_versions:
+                for version in served:
+                    targets[(key, version)] = None
             elif len(served) == 1:
                 targets[(key, served[0])] = None
             else:

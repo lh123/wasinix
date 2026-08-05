@@ -65,6 +65,7 @@ jobs:
           restore-keys: nix-flake-inputs-
 
       - name: Build index
+        id: build-index
         run: nix build .#pythonRegistry -o registry-result --option accept-flake-config true
 
       - name: Publish wheels to the index volume
@@ -78,16 +79,21 @@ jobs:
       # repo admin, which GITHUB_TOKEN never has:
       #   gh api -X POST repos/wasix-org/wasinix/pages -f build_type=workflow
       - name: Prepare Pages snapshot
+        # Pages intentionally tracks the fresh build, independently of the
+        # append-only volume publication above.
+        if: always() && steps.build-index.outcome == 'success'
         run: |
           # materialize the result symlink with writable modes for the tarring action
           mkdir site
           cp -r --no-preserve=mode,ownership --dereference registry-result/. site/
 
       - name: Upload Pages artifact
+        if: always() && steps.build-index.outcome == 'success'
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
           path: site
 
       - name: Deploy to GitHub Pages
         id: deploy
+        if: always() && steps.build-index.outcome == 'success'
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

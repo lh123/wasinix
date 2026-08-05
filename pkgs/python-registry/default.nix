@@ -22,7 +22,7 @@
   # repo root: keyed by attr path (pythonRegistry.wheels.<pname>) then upstream version, so an
   # upstream bump resets to 1 by key miss. Shared across python versions (same upstream version),
   # the cp tag keeps filenames distinct. Bump when republishing a changed build; published
-  # filenames are immutable, publish.py refuses reuse.
+  # filenames are immutable, so publish.py retains the original artifact on name reuse.
   rels = builtins.fromJSON (builtins.readFile ../../rels.json);
   relPrefix = "pythonRegistry.wheels.";
 
@@ -49,6 +49,7 @@
     map (drv: rec {
       name = drv.pname or drv.name;
       version = drv.version;
+      relKey = "${relPrefix}${name}";
       rel = (rels."${relPrefix}${name}" or {}).${version} or 1;
       dist = "${drv.dist}";
       # provenance nested by python version and upstream version, so pname collides neither

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Accumulating publisher for the static registry.
 
-Copies the wheels of a freshly built registry (nix build .#pythonRegistry)
+Copies new wheels from a freshly built registry (nix build .#pythonRegistry)
 into the S3-compatible volume behind the index app and regenerates the index
 HTML over everything published so far. Published wheel filenames are
-immutable: a changed build of the same upstream version needs a rels.json
-bump, and nothing is ever deleted, so old lockfiles keep resolving.
+immutable: a changed build with an existing filename stays unpublished until a
+rels.json bump gives it a new name, and nothing is ever deleted, so old
+lockfiles keep resolving.
 
 Volume layout (= the web root served by the app):
   index.html, simple/...     as in the nix output
@@ -64,7 +65,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    # published filename -> {name, attr, drv_path}, emitted by make-index.py
+    # published filename -> release selector + provenance, emitted by make-index.py
     prov = json.loads((args.registry / "provenance.json").read_text())
 
     tmp = Path(tempfile.mkdtemp(prefix="wasix-publish-"))
@@ -95,8 +96,12 @@ def main():
         prev = published.get(whl.name)
         if prev:
             if prev["sha256"] != sha:
+                wheel_prov = prov[whl.name]
                 conflicts.append(
-                    f"{whl.name} (bump pythonRegistry.wheels.{project} in rels.json)"
+                    (
+                        whl.name,
+                        f"{wheel_prov['rel_key']}=={wheel_prov['version']}",
+                    )
                 )
             continue
         metadata = whl.with_name(whl.name + ".metadata").read_bytes()
@@ -123,10 +128,24 @@ def main():
         new.append(whl.name)
 
     if conflicts:
-        sys.exit(
-            "published wheels are immutable, refusing to overwrite:\n  "
-            + "\n  ".join(conflicts)
+        print(
+            "published wheels are immutable; retaining the existing artifacts:\n  "
+            + "\n  ".join(f"{wheel} ({spec})" for wheel, spec in conflicts),
+            file=sys.stderr,
         )
+        print(
+            "bump-rel specs for the conflicting releases:\n  "
+            + "\n  ".join(dict.fromkeys(spec for _, spec in conflicts)),
+            file=sys.stderr,
+        )
+
+    # A registry rebuild can change existing wheel bytes through a nixpkgs,
+    # toolchain, or runtime update. Those are not releases unless rels.json
+    # gave them a new filename. Do not rewrite the stable index when nothing
+    # new is being added; GitHub Pages publishes the fresh build separately.
+    if not new:
+        print("no new immutable wheels to publish")
+        return
 
     # regenerate the HTML over everything published, old and new
     projects: dict[str, dict[str, dict]] = {}

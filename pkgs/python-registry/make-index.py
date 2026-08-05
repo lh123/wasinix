@@ -508,6 +508,8 @@ def main() -> None:
                 sys.exit(f"conflicting contents for {moved.name}:\n  {prev}\n  {moved}")
             provenance[moved.name] = {
                 "name": entry["name"],
+                "rel_key": entry["relKey"],
+                "version": entry["version"],
                 "attr": entry["attr"],
                 "drv_path": entry["drvPath"],
                 **({"source": entry["source"]} if entry.get("source") else {}),
