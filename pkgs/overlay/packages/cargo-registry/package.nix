@@ -74,7 +74,7 @@ in
         shipped = true;
         retention = "none";
       };
-      updateScript = [updateScript] ++ nix-update-script {extraArgs = ["--flake"];};
+      updateScript = ["${updateScript}/bin/wasix-cargo-registry-update"] ++ nix-update-script {extraArgs = ["--flake"];};
     };
 
     meta = {
