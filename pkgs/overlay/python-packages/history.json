@@ -60,6 +60,13 @@
       ]
     }
   },
+  "openai": {
+    "2.45.0": {
+      "hash": "sha256-4RY+IollRU7Z7oBp80NKbsN83ZUX0Qbo9o1pFLdUN/8=",
+      "note": "supports langchain-openai>=1.4.1 in the python-streamlit template",
+      "tag": "v2.45.0"
+    }
+  },
   "packaging": {
     "24.2": {
       "hash": "sha256-wiim3F6TLTRrxXOTeRCdSeiFPdgiNXHHxbVSYO3AuX8=",
