@@ -121,7 +121,7 @@ in
 
     env = {
       SETUPTOOLS_SCM_PRETEND_VERSION = version;
-      # tokio's mio Waker is off on wasi; opting in (tokio/1.52.3.patch) needs
+      # tokio's mio Waker is off on wasi; opting in (tokio/1.51.0.patch) needs
       # mio's wasix backend from the crate patches. Without it the reactor parks
       # with nothing able to wake it and the runtime never drops.
       RUSTFLAGS = "--cfg tokio_wasix_waker";

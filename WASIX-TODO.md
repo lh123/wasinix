@@ -62,7 +62,7 @@ Status: 🔴 needs upstream fix · 🟡 workaround in place · 🟢 fixed.
   the reference runtime returns for a poll with zero subscriptions
   (`runtime/io/driver.rs`, arm commented "poll without subscriptions"). Under
   panic=abort a park panic takes the process down.
-- Workaround (`tokio/1.52.3.patch`): also tolerate `Unsupported` (ENOTSUP,
+- Workaround (`tokio/1.51.0.patch`): also tolerate `Unsupported` (ENOTSUP,
   errno 58) in that arm, treating it like the empty-poll case.
 - The ENOTSUP was originally attributed to wasmer's `poll_oneoff` rejecting a
   zero-length subscription set. That attribution does not hold against the
@@ -108,7 +108,7 @@ Status: 🔴 needs upstream fix · 🟡 workaround in place · 🟢 fixed.
   `Waker`, but tokio still skips it, so any completion that must re-schedule a
   task through the I/O driver (e.g. `tokio::fs`, which rustfs uses for
   `access()`) parks the reactor forever with nothing able to wake it.
-- Workaround (`tokio/1.52.3.patch`): widen those four gates to
+- Workaround (`tokio/1.51.0.patch`): widen those four gates to
   `any(not(target_os = "wasi"), all(target_vendor = "wasmer", tokio_wasix_waker))`,
   and have the consumer opt in with `RUSTFLAGS = "--cfg tokio_wasix_waker"`
   (rustfs does). With the futex_wake fix above, a spawned `tokio::fs` task +
