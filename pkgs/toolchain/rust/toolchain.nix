@@ -274,12 +274,12 @@ in
       # marks them unsupported in the profiles rust can't target (off/exnref*).
       supportedProfiles = ["eh"] ++ optionals withDynamicLinking ["ehpic"];
 
-      # The updater builds this FOD alone with a fake hash to obtain the hash
-      # for the new tag without scheduling the full toolchain.
-      inherit cargoVendorDir;
+      # The vendor FOD under the name nix-update looks for, so a bump re-derives
+      # its hash (cargoDeps.vendorStaging) without scheduling the full toolchain.
+      cargoDeps = cargoVendorDir;
 
-      # Bumps, then re-derives the stage0 bootstrap pin and cargo vendor hash
-      # from the new tag (the nix-update command is passed through as its argv).
+      # Bumps, then re-derives the stage0 bootstrap pin from the new tag (the
+      # nix-update command is passed through as its argv).
       updateScript = ["pkgs/toolchain/rust/update.py"] ++ nix-update-script {extraArgs = ["--flake"];};
     };
 

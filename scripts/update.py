@@ -24,7 +24,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from updater_lib import REPO, gh, prefetch_url, run  # noqa: F401
+from updater_lib import REPO, run
 
 SYSTEM = "x86_64-linux"
 
@@ -342,12 +342,8 @@ def run_update_script(t):
     # last line that looks like an outcome, else fall back to the
     # tree-changed heuristic in main()
     for line in reversed(out.splitlines()):
-        if line.startswith("up to date"):
-            return line
         m = re.search(r"(\S+) -> (\S+?)( in /|$)", line)
         if m:
-            if m.group(1) == m.group(2):
-                return f"up to date ({m.group(1)})"
             return f"{m.group(1)} -> {m.group(2)}"
     return None
 
