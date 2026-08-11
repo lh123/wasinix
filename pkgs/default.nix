@@ -15,7 +15,12 @@
     overlays = [
       (_: prev: {
         nix-update = prev.nix-update.overrideAttrs (old: {
-          patches = (old.patches or []) ++ [./nix-update-read-write-eval.patch];
+          patches =
+            (old.patches or [])
+            ++ [
+              ./nix-update-read-write-eval.patch
+              ./nix-update-prefer-tag-over-rev.patch
+            ];
         });
       })
     ];
