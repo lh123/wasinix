@@ -52,6 +52,12 @@ nix-fast-build --flake .#legacyPackages.x86_64-linux.ci --skip-cached \
 
 This is the same build set as CI (`scripts/ci-build.sh`).
 
+`ci-build-remote.sh` pushes completed work by default, through `ci-build.sh`, to
+the same cache the GitHub CI builders consume. Running it before CI therefore
+warms the PR build: cached targets are skipped and only build once. Uploading
+requires the cache signing and storage credentials supplied through Doppler;
+without access to those keys, use `--no-push` and let CI populate the cache.
+
 `--skip-cached` is what makes it survivable. It drops any job already in the
 binary cache, so those cost neither a build nor a download, where a plain
 `nix build` of the same target would substitute the whole closure into the local
