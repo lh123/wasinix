@@ -177,6 +177,10 @@ nix build <targets> --max-jobs 0 \
   -L > /tmp/wasinix-<what>.log 2>&1 &
 ```
 
+The path must be directly accessible from the user's terminal and survive the
+agent session. Use `/tmp/wasinix-<what>.log` or a named path in the workspace,
+not a harness scratchpad, session directory, or private temporary tree.
+
 Then poll the log rather than restarting the build. If you lose the handle, read
 the log to find out where it got to; never relaunch on the assumption it died.
 Watch for stalls too: judge progress by new output, and report "no output for N
