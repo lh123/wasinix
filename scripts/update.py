@@ -29,6 +29,18 @@ from updater_lib import REPO, run
 SYSTEM = "x86_64-linux"
 
 
+def failure_line(e):
+    """One line for the summary table. The exception's own first line is the
+    `<cmd> exited N:` header, and nix prints the cause below it, so pick the
+    first `error:` line that carries a message (`error: Cannot build
+    '/nix/store/...-vendor-staging.drv'.`) over the header."""
+    lines = [ln.strip() for ln in str(e).splitlines() if ln.strip()]
+    if not lines:
+        return "unknown error"
+    detail = [ln for ln in lines[1:] if ln.startswith("error:") and ln != "error:"]
+    return (detail or lines[1:] or lines)[0][:200]
+
+
 @dataclass
 class Target:
     name: str
@@ -450,10 +462,9 @@ def main():
         try:
             outcome = backends[t.backend](t)
         except Exception as e:
-            first = str(e).splitlines()[0][:120] if str(e) else "unknown error"
             print(f"  FAILED: {e}")
             failures.append(t.name)
-            results.append((t.name, f"FAILED: {first}"))
+            results.append((t.name, f"FAILED: {failure_line(e)}"))
             continue
         changed = repo_status() != before
         any_changed = any_changed or changed
@@ -470,7 +481,7 @@ def main():
                 results.append(("history", retained))
         except Exception as e:
             failures.append("history retention")
-            results.append(("history", f"FAILED: {str(e).splitlines()[0][:120]}"))
+            results.append(("history", f"FAILED: {failure_line(e)}"))
 
     try:
         pruned = prune_rels()
@@ -478,7 +489,7 @@ def main():
             results.append(("rels", pruned))
     except Exception as e:
         failures.append("rels prune")
-        results.append(("rels", f"FAILED: {str(e).splitlines()[0][:120]}"))
+        results.append(("rels", f"FAILED: {failure_line(e)}"))
 
     # Package-declared re-sync, last: a hook regenerates a listing derived from
     # the pins (icu's versions.nix) once history and prune have settled. Each is
@@ -491,7 +502,7 @@ def main():
                 outcome = run_retention_hook(name, command)
             except Exception as e:
                 failures.append(f"hook:{name}")
-                results.append((name, f"FAILED: {str(e).splitlines()[0][:120]}"))
+                results.append((name, f"FAILED: {failure_line(e)}"))
                 continue
             # Report only when the hook changed something; its no-op line (icu's
             # "versions.nix up to date") still prints to the log but would be
