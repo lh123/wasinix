@@ -72,7 +72,8 @@ often missed:
 ## Never act in the user's name
 
 No `git push`. No opening or closing PRs or issues. No GitHub comments of any
-kind, including replies to review threads. No commits unless asked.
+kind, including replies to review threads, unless the user explicitly asks you
+to. No commits unless the user gave you permission.
 
 Writing the code is not authorization to ship it. "Fix this" and "go ahead"
 authorize the edit, never the commit or the push, and approval for one push is
