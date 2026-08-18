@@ -72,6 +72,8 @@ pub enum CommandTree {
         #[command(flatten)]
         json: ui::JsonArg,
     },
+    /// First-run facts: what is configured, what is missing, and the fix
+    Doctor,
     /// The shared binary cache
     #[command(subcommand)]
     Cache(CacheCommand),
@@ -493,6 +495,105 @@ fn recorded_eval(tree: &str) -> Result<Option<(String, crate::ci::evalmap::EvalM
         }
     }
     Ok(None)
+}
+
+/// One table of first-run facts, each red row naming its fix. Reporting is
+/// the whole job: a half-configured machine is a state, not an error.
+fn doctor() -> Result<CommandStatus> {
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    let mut row = |check: &str, ok: bool, detail: String| {
+        rows.push(vec![
+            check.to_string(),
+            if ok { "ok" } else { "--" }.to_string(),
+            detail,
+        ]);
+    };
+
+    let config = crate::nix::builder::config_path()?;
+    let configured = config.exists();
+    row(
+        "builders.toml",
+        configured,
+        if configured {
+            config.display().to_string()
+        } else {
+            "missing; `wasinix remote init` writes a template".to_string()
+        },
+    );
+
+    if configured {
+        match crate::support::git::repo_root()
+            .and_then(|repo| crate::nix::builder::load(&repo, None))
+        {
+            Ok(builder) => {
+                let reachable = builder.reachable().is_ok();
+                row(
+                    "default remote",
+                    reachable,
+                    if reachable {
+                        format!("{} ({})", builder.name, builder.host)
+                    } else {
+                        format!("{} unreachable; `wasinix remote doctor`", builder.name)
+                    },
+                );
+            }
+            Err(error) => row("default remote", false, error.to_string()),
+        }
+    } else {
+        row(
+            "default remote",
+            false,
+            "none until builders.toml exists".to_string(),
+        );
+    }
+
+    let key = crate::support::env::signing_key()?.is_some();
+    row(
+        "signing key",
+        key,
+        if key {
+            "NIX_SIGNING_KEY set; --push-cache and `cache push` work".to_string()
+        } else {
+            "NIX_SIGNING_KEY unset; builds work, pushing to the cache does not".to_string()
+        },
+    );
+    let aws = crate::support::env::push_credentials()?
+        .iter()
+        .any(|(name, _)| name == "AWS_ACCESS_KEY_ID");
+    row(
+        "S3 credentials",
+        aws,
+        if aws {
+            "AWS credentials set".to_string()
+        } else {
+            "AWS_ACCESS_KEY_ID unset; cache pushes cannot upload".to_string()
+        },
+    );
+
+    let catalog = crate::support::completions::recall("selectors");
+    row(
+        "job catalog",
+        !catalog.is_empty(),
+        if catalog.is_empty() {
+            "empty; the first build, spot, or diff records it".to_string()
+        } else {
+            let age = crate::support::completions::age("selectors")
+                .map(|age| {
+                    format!(
+                        ", recorded {} ago",
+                        crate::support::format::duration(age.as_secs_f64())
+                    )
+                })
+                .unwrap_or_default();
+            format!("{} names{age}", catalog.len())
+        },
+    );
+
+    ui::output(crate::support::table::render(
+        Some(&["check", "state", "detail"]),
+        &rows,
+    ));
+    Ok(CommandStatus::SUCCESS)
 }
 
 fn cache_command(command: CacheCommand) -> Result<CommandStatus> {
@@ -1290,6 +1391,7 @@ fn run(command: CommandTree) -> Result<CommandStatus> {
         CommandTree::Diff(args) => request::run_diff(&crate::support::git::repo_root()?, args),
         CommandTree::Bisect(args) => bisect::run_bisect(&crate::support::git::repo_root()?, args),
         CommandTree::Jobs { pattern, json } => jobs_command(pattern, json),
+        CommandTree::Doctor => doctor(),
         CommandTree::Cache(command) => cache_command(command),
         CommandTree::Run(command) => run_command(command),
         CommandTree::Cargo(command) => registries::run_cargo(command),

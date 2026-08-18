@@ -12,6 +12,7 @@ doc:
 | Read                   | For                                                               |
 | ---------------------- | ----------------------------------------------------------------- |
 | `CONTRIBUTING.md`      | contribution and PR expectations                                  |
+| `docs/setup.md`        | first-time setup and `wasinix doctor`                             |
 | `docs/architecture.md` | how the layers fit together, flake outputs, one place per concern |
 | `docs/c.md`            | C/C++ toolchain, profiles, and cross stdenv                       |
 | `docs/packaging.md`    | adding a package, tweaks, deps, patches, tests                    |

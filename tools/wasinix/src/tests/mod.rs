@@ -3063,6 +3063,7 @@ mod corpus {
             "diff",
             "bisect",
             "jobs",
+            "doctor",
             "cache push",
             "run start",
             "run list",

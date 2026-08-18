@@ -40,17 +40,20 @@ them under Wasmer. Details: [`docs/architecture.md`](docs/architecture.md).
 
 ## Documentation
 
-| doc                                            | contents                                     |
-| ---------------------------------------------- | -------------------------------------------- |
-| [`docs/architecture.md`](docs/architecture.md) | how the layers fit together                  |
-| [`docs/c.md`](docs/c.md)                       | C/C++ toolchain, profiles, and cross stdenv  |
-| [`docs/packaging.md`](docs/packaging.md)       | adding packages: C, CLI/webc, Rust, Python   |
-| [`docs/registry.md`](docs/registry.md)         | publishing, version history, rels, previews  |
-| [`docs/rust.md`](docs/rust.md)                 | rust builds, crate patches, cargo registry   |
-| [`docs/python.md`](docs/python.md)             | CPython, package overlays, and wheels        |
-| [`docs/building.md`](docs/building.md)         | where builds run, building and checking      |
-| [`docs/style.md`](docs/style.md)               | comments, naming, commits, code norms        |
-| [`docs/updating.md`](docs/updating.md)         | the pin updater                              |
-| [`docs/spot.md`](docs/spot.md)                 | experimenting without rebuilding the world   |
-| [`AGENTS.md`](AGENTS.md)                       | extra rules for agents working here          |
-| [`WASIX-TODO.md`](WASIX-TODO.md)               | known WASIX/toolchain issues and workarounds |
+| doc                                                  | contents                                     |
+| ---------------------------------------------------- | -------------------------------------------- |
+| [`docs/setup.md`](docs/setup.md)                     | first-time setup and `wasinix doctor`        |
+| [`docs/architecture.md`](docs/architecture.md)       | how the layers fit together                  |
+| [`docs/c.md`](docs/c.md)                             | C/C++ toolchain, profiles, and cross stdenv  |
+| [`docs/packaging.md`](docs/packaging.md)             | adding packages: C, CLI/webc, Rust, Python   |
+| [`docs/registry.md`](docs/registry.md)               | publishing, version history, rels, previews  |
+| [`docs/rust.md`](docs/rust.md)                       | rust builds, crate patches, cargo registry   |
+| [`docs/python.md`](docs/python.md)                   | CPython, package overlays, and wheels        |
+| [`docs/building.md`](docs/building.md)               | where builds run, building and checking      |
+| [`docs/ci.md`](docs/ci.md)                           | the CI command tree and its surfaces         |
+| [`docs/python-coverage.md`](docs/python-coverage.md) | python ecosystem coverage status             |
+| [`docs/style.md`](docs/style.md)                     | comments, naming, commits, code norms        |
+| [`docs/updating.md`](docs/updating.md)               | the pin updater                              |
+| [`docs/spot.md`](docs/spot.md)                       | experimenting without rebuilding the world   |
+| [`AGENTS.md`](AGENTS.md)                             | extra rules for agents working here          |
+| [`WASIX-TODO.md`](WASIX-TODO.md)                     | known WASIX/toolchain issues and workarounds |
