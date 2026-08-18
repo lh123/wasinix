@@ -3,6 +3,12 @@ description:
   Install Nix with the wasinix cache configured and restore the flake-inputs
   cache. The nix config block is a verified copy of `wasinix ci nix-config` (the
   binary cannot run before Nix exists); a crate test fails when the two drift.
+inputs:
+  wasinix-binary:
+    description:
+      Make the wasinix binary ready in the store, from the actions cache when
+      its sources are unchanged, building and re-caching it otherwise
+    default: "false"
 runs:
   using: composite
   steps:
@@ -28,3 +34,26 @@ runs:
         # the key version bumps whenever the cached shape changes
         key: nix-flake-inputs-v3-${{ hashFiles('flake.lock') }}
         restore-keys: nix-flake-inputs-v3-
+
+    - name: Cache the wasinix binary closure
+      if: inputs.wasinix-binary == 'true'
+      uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+      with:
+        # A file:// binary cache holding only the wasinix closure: an
+        # actions-cache hit imports it at runner-local speed, beating both
+        # the S3 substituter and a compile.
+        path: ~/.cache/wasinix-bin
+        key:
+          wasinix-bin-v1-${{ hashFiles('tools/wasinix/**', 'flake.nix',
+          'flake.lock') }}
+
+    - name: Provide the wasinix binary
+      if: inputs.wasinix-binary == 'true'
+      shell: bash
+      run: |
+        store="file://$HOME/.cache/wasinix-bin"
+        if [ -e "$HOME/.cache/wasinix-bin/nix-cache-info" ]; then
+          nix copy --from "$store" --all --no-check-sigs
+        fi
+        nix build .#wasinix --no-link
+        nix copy --to "$store" .#wasinix
