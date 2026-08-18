@@ -353,13 +353,13 @@ pub fn run(request: Request<'_>) -> Result<CommandStatus> {
     // The builder's own store URL: a configured store_url override applies
     // here too, not only to the store route.
     let host_store = request.builder.store();
-    let copied = crate::support::nix::Invocation::plain("copy")
+    let (copied, detail) = crate::support::nix::Invocation::plain("copy")
         .args(["--to", &host_store])
         .operand(&source)
-        .status()?;
+        .captured_status()?;
     if !copied.is_success() {
         return request_error(format!(
-            "could not copy source to {}",
+            "could not copy source to {}: {detail}",
             request.builder.host
         ));
     }

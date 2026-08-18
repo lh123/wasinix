@@ -170,12 +170,12 @@ fn push_build_deps(key: &SigningKey, drvs: &BTreeSet<String>) -> Result<()> {
         return Ok(());
     }
     crate::support::ui::fact("pushing build-time paths", outputs.len());
-    let copied = crate::support::nix::Invocation::plain("copy")
+    let (copied, detail) = crate::support::nix::Invocation::plain("copy")
         .args(["--to", &key.store()])
         .operands(outputs)
-        .status()?;
+        .captured_status()?;
     if !copied.is_success() {
-        crate::support::ui::warning("build-dep push failed (non-fatal)");
+        crate::support::ui::warning(format!("build-dep push failed (non-fatal): {detail}"));
     }
     Ok(())
 }
@@ -338,18 +338,14 @@ impl Uploader {
         if batch.is_empty() {
             return;
         }
-        // Captured, not inherited: nix's transfer chatter on stderr would
-        // fight the progress ticker for the terminal's last line.
-        let copied = crate::support::nix::Invocation::plain("copy")
+        match crate::support::nix::Invocation::plain("copy")
             .args(["--to", store])
             .operands(batch.drain(..))
-            .command()
-            .and_then(|mut cmd| crate::support::tools::output(&mut cmd));
-        match copied {
-            Ok(output) if output.status.success() => {}
-            Ok(output) => crate::support::ui::warning(format!(
-                "cache push failed (non-fatal): {}",
-                crate::support::error::tail(&String::from_utf8_lossy(&output.stderr), 300)
+            .captured_status()
+        {
+            Ok((status, _)) if status.is_success() => {}
+            Ok((_, detail)) => crate::support::ui::warning(format!(
+                "cache push failed (non-fatal): {detail}"
             )),
             Err(error) => {
                 crate::support::ui::warning(format!("cache push failed (non-fatal): {error}"))

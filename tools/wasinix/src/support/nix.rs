@@ -317,6 +317,17 @@ impl Invocation {
         )?))
     }
 
+    /// Run captured, so nix's transfer chatter cannot fight the progress
+    /// ticker for the terminal; the stderr tail comes back for the caller's
+    /// failure message.
+    pub fn captured_status(&self) -> Result<(CommandStatus, String)> {
+        let mut cmd = self.command()?;
+        crate::support::tools::log(&cmd);
+        let output = crate::support::tools::output(&mut cmd)?;
+        let tail = crate::support::error::tail(&String::from_utf8_lossy(&output.stderr), 300);
+        Ok((CommandStatus::from_exit(output.status), tail))
+    }
+
     /// An unchecked run for callers that parse failure output (a dry-run
     /// plan, a hash minted from a failing build). The reason names why the
     /// exit code is the caller's to judge; the allowlist test keys on it.
