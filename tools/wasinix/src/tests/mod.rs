@@ -3653,6 +3653,7 @@ mod corpus {
                     if window.contains("/reactions")
                         || window.contains("failed before it could report")
                         || window.contains("mutation commands only work on")
+                        || window.contains("superseded by a newer command")
                     {
                         continue;
                     }

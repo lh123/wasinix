@@ -183,7 +183,7 @@ jobs:
             --sha "$HEAD_SHA" \
             --pull-request "$PULL_REQUEST" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --comment --reply-to "$COMMENT_ID" --check \
+            --comment --reply-to "$COMMENT_ID" \
             || echo "progress publishing stopped"
           "$bin" run wait "$id"
 
@@ -204,7 +204,7 @@ jobs:
             --sha "$HEAD_SHA" \
             --pull-request "$PULL_REQUEST" \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            --comment --reply-to "$COMMENT_ID" --check \
+            --comment --reply-to "$COMMENT_ID" \
             --step-summary "$GITHUB_STEP_SUMMARY"
           echo "reported=true" >> "$GITHUB_OUTPUT"
 
@@ -228,7 +228,14 @@ jobs:
 
   # No push credential here: the PR tree's own update scripts execute in
   # this job, and all they can reach is the bundle it leaves behind.
+  # Mutations rewrite shared branch state, so they serialize per PR; a
+  # queued mutation replaced by a newer one gets the superseded reply.
   mutate:
+    concurrency:
+      group:
+        command-mutate-${{ github.repository_id }}-pr-${{
+        github.event.issue.number }}
+      cancel-in-progress: false
     needs: authorize
     if: >-
       needs.authorize.outputs.kind == 'mutation' && github.repository ==
@@ -347,6 +354,23 @@ jobs:
         run: |
           gh api "repos/$GITHUB_REPOSITORY/issues/${{ github.event.issue.number }}/comments" \
             -f body="❌ \`/wasinix\` mutation commands only work on wasix-org/wasinix pull requests. (acting on ${{ github.event.comment.html_url }})" >/dev/null
+
+  # A mutation replaced while queued never ran; say so instead of silence.
+  reply-superseded:
+    needs: [authorize, mutate]
+    if: always() && needs.mutate.result == 'cancelled'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      # constant body, so no markdown is produced outside the crate
+      - name: Reply superseded
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/issues/${{ github.event.issue.number }}/comments" \
+            -f body="⏭ \`/wasinix\` command superseded by a newer command on this pull request. (acting on ${{ github.event.comment.html_url }})" >/dev/null
 
   # a command must never fail silently: authorization and run errors reply
   # to the comment that asked. When Post report already published the honest

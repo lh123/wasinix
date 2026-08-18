@@ -7,8 +7,11 @@ on:
   issue_comment:
     types: [created]
 
+# Per comment, so every command is acknowledged and authorized; the heavy
+# jobs carry their own per-PR serialization inside the pipeline.
 concurrency:
-  group: command-${{ github.repository_id }}-pr-${{ github.event.issue.number }}
+  group:
+    command-${{ github.repository_id }}-comment-${{ github.event.comment.id }}
   cancel-in-progress: false
 
 jobs:

@@ -88,10 +88,11 @@ authorizes it (the shared grammar, a live write-permission check, PR state),
 `ci command` runs it, and the reply is keyed to the commenting comment. Every
 malformed or unauthorized command gets a reply.
 
-Commands on one PR serialize; different PRs run in parallel. GitHub queues at
-most one waiting run per PR and a newer command replaces the waiting one, so of
-a rapid burst the first and the latest execute. The eyes reaction is the
-receipt: a command comment that never gets one was superseded while queued.
+Every command comment runs its own workflow: acknowledged, authorized, and
+answered even in a burst, and builds run in parallel, each replying to its own
+comment (the PR's required check stays build.yml's). Mutations rewrite shared
+branch state, so they serialize per PR: of a mutation burst the first and the
+latest run, and one replaced while queued gets a superseded reply.
 
 Untrusted text (build logs, junit messages, PR comment bodies) passes exactly
 one sanitizer at the render edge: fences sized past the payload, HTML and cell
