@@ -22,3 +22,20 @@ runs:
           /opt/hostedtoolcache
         sudo docker image prune --all --force >/dev/null 2>&1 || true
         echo "after: $(df -h --output=avail / | tail -1 | tr -d ' ') free"
+
+    # GitHub-hosted images carry a second, larger temp disk at /mnt; putting
+    # the store there roughly triples its headroom. Depot runners have one
+    # root volume, so the guard makes this a no-op for them. Must run before
+    # nix is installed.
+    - name: Put the nix store on the big disk
+      shell: bash
+      run: |
+        root_free=$(df --output=avail / | tail -1)
+        mnt_free=$(df --output=avail /mnt 2>/dev/null | tail -1 || echo 0)
+        if [ "${mnt_free:-0}" -gt "$root_free" ]; then
+          sudo mkdir -p /mnt/nix /nix
+          sudo mount --bind /mnt/nix /nix
+          echo "store on /mnt ($(df -h --output=avail /mnt | tail -1 | tr -d ' ') free)"
+        else
+          echo "store stays on / (no larger /mnt)"
+        fi
