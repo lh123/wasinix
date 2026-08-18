@@ -135,6 +135,9 @@ jobs:
           PR: ${{ github.event.issue.number }}
         run: git fetch --no-tags origin "refs/pull/$PR/head"
 
+      - name: Free runner disk
+        uses: ./.github/actions/free-disk
+
       - name: Set up Nix
         uses: ./.github/actions/setup-nix
         with:
@@ -245,6 +248,9 @@ jobs:
         env:
           PR: ${{ github.event.issue.number }}
         run: git fetch --no-tags origin "refs/pull/$PR/head"
+
+      - name: Free runner disk
+        uses: ./.github/actions/free-disk
 
       - name: Set up Nix
         uses: ./.github/actions/setup-nix

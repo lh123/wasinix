@@ -652,10 +652,15 @@ fn neutral(report: &Report, fragments: &BTreeMap<String, Fragment>, links: &Link
 fn in_progress(report: &Report, snapshot: Option<&Snapshot>, links: &Links) -> Markdown {
     let counts = match snapshot {
         Some(snapshot) => {
-            let mut parts = vec![Markdown::text(&format!(
-                "{} jobs done",
-                snapshot.completed_jobs
-            ))];
+            // The planned total, known once the phases opened; before that
+            // the bare count is all there is.
+            let total: usize = snapshot.phases.iter().filter_map(|phase| phase.jobs).sum();
+            let done = if total > 0 {
+                format!("{}/{total} jobs done", snapshot.completed_jobs)
+            } else {
+                format!("{} jobs done", snapshot.completed_jobs)
+            };
+            let mut parts = vec![Markdown::text(&done)];
             if snapshot.failed_jobs > 0 {
                 parts.push(Markdown::text(&format!("{} failed", snapshot.failed_jobs)));
             }

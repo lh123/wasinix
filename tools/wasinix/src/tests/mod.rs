@@ -2209,7 +2209,13 @@ mod markdown {
             completed_jobs: 3106,
             cached_jobs: 0,
             failed_jobs: 0,
-            phases: Vec::new(),
+            phases: vec![crate::ci::events::PhaseSnapshot {
+                task_id: "case.core".into(),
+                label: "case: Core".into(),
+                status: crate::support::atoms::TaskStatus::Pending,
+                headline: None,
+                jobs: Some(7228),
+            }],
             recent_failures: Vec::new(),
             building: Vec::new(),
         };

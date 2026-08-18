@@ -34,6 +34,9 @@ jobs:
           # checkout does not have
           fetch-depth: 0
 
+      - name: Free runner disk
+        uses: ./.github/actions/free-disk
+
       - name: Set up Nix
         uses: ./.github/actions/setup-nix
 
