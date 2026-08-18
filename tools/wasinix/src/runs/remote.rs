@@ -31,6 +31,18 @@ pub struct Request<'a> {
     pub fetch_to: &'a Path,
     /// Sink for the mirrored event stream while the run executes.
     pub progress: &'a mut dyn FnMut(&Event),
+    /// Export the local push credentials (signing key, S3) into the remote
+    /// run, for a payload that pushes to the cache from the host.
+    pub forward_push_credentials: bool,
+}
+
+/// Export lines for the launch script's secret prefix. The script travels
+/// over ssh stdin, never argv, so these stay out of the remote `ps`.
+pub(crate) fn credential_exports(pairs: &[(String, String)]) -> String {
+    pairs
+        .iter()
+        .map(|(name, value)| format!("export {name}={}\n", quote(value)))
+        .collect()
 }
 
 fn flake_source(repo: &Path) -> Result<String> {
@@ -399,7 +411,14 @@ pub fn run(request: Request<'_>) -> Result<CommandStatus> {
         limits,
         &(request.payload)(&state),
     );
-    let launched = request.builder.ssh_output(Deadline::Launch, &script)?;
+    let secrets = if request.forward_push_credentials {
+        credential_exports(&crate::support::env::push_credentials()?)
+    } else {
+        String::new()
+    };
+    let launched = request
+        .builder
+        .ssh_stdin_output(Deadline::Launch, &format!("{secrets}{script}"))?;
     let run_dir = launched
         .lines()
         .find_map(|line| line.strip_prefix("WASINIX_RUN_DIR "))

@@ -42,6 +42,16 @@ pub fn cache_push_store() -> String {
 }
 
 
+/// Whether a stderr line is nix transfer chatter rather than a message: an
+/// error excerpt taking the tail of a stream must not let hundreds of
+/// `copying path` lines push the actual failure out of the window.
+pub fn progress_noise(line: &str) -> bool {
+    let line = line.trim_start();
+    ["copying path '", "building '", "unpacking '", "querying info about", "downloading '"]
+        .iter()
+        .any(|prefix| line.starts_with(prefix))
+}
+
 /// The nix config block workflows install, from the same constants the
 /// binary trusts.
 pub fn nix_config() -> String {

@@ -123,6 +123,22 @@ fn supervisor_alive(pid: u32, run_dir: &Path) -> bool {
         .any(|arg| arg == run_dir || Path::new(arg) == run_dir.as_ref())
 }
 
+/// The run log's last words, transfer chatter dropped: the only evidence a
+/// run that died before writing a report leaves behind.
+pub fn log_tail(run_dir: &Path, limit: usize) -> Option<String> {
+    let text = std::fs::read_to_string(run_dir.join(LOG_FILE)).ok()?;
+    let kept: String = text
+        .lines()
+        .filter(|line| !crate::support::nix::progress_noise(line))
+        .fold(String::new(), |mut kept, line| {
+            kept.push_str(line);
+            kept.push('\n');
+            kept
+        });
+    let tail = crate::support::error::tail(&kept, limit);
+    (!tail.is_empty()).then_some(tail)
+}
+
 /// The run as an observer should report it: a recorded non-final state whose
 /// supervisor is gone becomes `lost`, a state like any other.
 pub fn observed(run_dir: &Path) -> Result<Run> {

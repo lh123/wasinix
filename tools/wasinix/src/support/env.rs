@@ -66,6 +66,24 @@ pub fn signing_key() -> Result<Option<String>> {
     optional("NIX_SIGNING_KEY")
 }
 
+/// The credentials a `--push-cache` run needs, whichever are set: the
+/// signing key and the S3 credentials the uploader's `nix copy` reads.
+pub fn push_credentials() -> Result<Vec<(String, String)>> {
+    let mut pairs = Vec::new();
+    for name in [
+        "NIX_SIGNING_KEY",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "AWS_DEFAULT_REGION",
+    ] {
+        if let Some(value) = optional(name)? {
+            pairs.push((name.to_string(), value));
+        }
+    }
+    Ok(pairs)
+}
+
 /// The deployed cargo registry's publish token; live publishes demand it,
 /// dry runs never read it.
 pub fn wasix_cargo_token() -> Result<Option<String>> {

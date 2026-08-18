@@ -433,6 +433,10 @@ pub(crate) fn report_result(run_dir: &Path) -> Result<()> {
     let path = crate::ci::prepare::report_path(run_dir);
     if !path.exists() {
         ui::note("the run ended without a report");
+        // The log's last words are the only evidence such a run leaves.
+        if let Some(tail) = crate::runs::log_tail(run_dir, 800) {
+            ui::note(tail);
+        }
         return Ok(());
     }
     let report: crate::ci::report::Report = schema::read(&path)?;
@@ -538,6 +542,7 @@ pub(crate) fn run_on_host(
         },
         fetch_to: run_dir,
         progress: &mut |event| renderer.event(event),
+        forward_push_credentials: matches!(cache, CacheIntent::Push),
     });
     renderer.finish();
     status

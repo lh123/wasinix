@@ -499,6 +499,37 @@ impl Builder {
         cmd.arg(script);
         crate::support::tools::checked_text(&mut cmd, &format!("remote command on {}", self.host))
     }
+
+    /// Like [`ssh_output`](Self::ssh_output), but the script arrives on
+    /// stdin (`bash -s`), so a secret line never appears in the remote argv.
+    pub fn ssh_stdin_output(&self, deadline: Deadline, script: &str) -> Result<String> {
+        use std::io::Write;
+        let mut cmd = self.ssh(deadline)?;
+        cmd.arg("bash -s")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        crate::support::tools::log(&cmd);
+        let mut child = crate::support::tools::spawn(&mut cmd)?;
+        child
+            .stdin
+            .take()
+            .expect("stdin was piped")
+            .write_all(script.as_bytes())
+            .map_err(|error| Error::Failure(format!("writing to {}: {error}", self.host)))?;
+        let output = child
+            .wait_with_output()
+            .map_err(|error| Error::Failure(format!("remote command on {}: {error}", self.host)))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(Error::Failure(format!(
+                "remote command on {}: {}",
+                self.host,
+                crate::support::error::tail(&stderr, 800)
+            )));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
 }
 
 /// A known_hosts entry for a registry host key. The registry stores the key
