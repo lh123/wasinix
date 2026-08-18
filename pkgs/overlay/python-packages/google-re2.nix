@@ -6,16 +6,21 @@
   pyprev,
   final,
   helpers,
-  lib,
   ...
 }: let
   absl = final.abseil-cpp;
-  libs =
-    map (f: "-l" + lib.removeSuffix ".a" (lib.removePrefix "lib" f))
-    (builtins.filter (lib.hasSuffix ".a") (builtins.attrNames (builtins.readDir "${absl}/lib")));
 in
   helpers.libTweaks {
     buildInputs = [absl];
-    env.NIX_LDFLAGS = "-L${absl}/lib " + lib.concatStringsSep " " libs;
+    # The -l set is enumerated in the build, where abseil is an input anyway;
+    # an eval-time readDir would import-from-derivation the whole toolchain.
+    preConfigure = ''
+      NIX_LDFLAGS="$NIX_LDFLAGS -L${absl}/lib"
+      for _lib in ${absl}/lib/lib*.a; do
+        _lib=''${_lib##*/lib}
+        NIX_LDFLAGS="$NIX_LDFLAGS -l''${_lib%.a}"
+      done
+      export NIX_LDFLAGS
+    '';
   }
   pyprev.google-re2
