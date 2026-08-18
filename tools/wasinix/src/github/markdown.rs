@@ -106,11 +106,18 @@ fn blocked_count(report: &Report) -> usize {
         .count()
 }
 
-fn job_count(fragments: &BTreeMap<String, Fragment>) -> Option<usize> {
-    fragments.values().find_map(|fragment| match &fragment.data {
-        Some(FragmentData::Eval(summary)) => Some(summary.job_count),
-        _ => None,
-    })
+/// Jobs across every case, so the finished heading agrees with the
+/// in-progress done/total, which sums all cases' phases.
+pub(crate) fn job_count(fragments: &BTreeMap<String, Fragment>) -> Option<usize> {
+    let mut total = 0usize;
+    let mut found = false;
+    for fragment in fragments.values() {
+        if let Some(FragmentData::Eval(summary)) = &fragment.data {
+            total += summary.job_count;
+            found = true;
+        }
+    }
+    found.then_some(total)
 }
 
 /// Each derivation counted once across every build task and case sharing

@@ -1981,6 +1981,33 @@ mod markdown {
     }
 
     #[test]
+    fn job_counts_sum_across_cases() {
+        use crate::ci::plan::TaskKind;
+        use crate::ci::report::{EvalSummary, Fragment, FragmentData};
+        use crate::support::atoms::TaskStatus;
+        let eval = |id: &str, jobs: usize| {
+            Fragment::new(
+                id.to_string(),
+                id.to_string(),
+                TaskKind::Eval,
+                TaskStatus::Success,
+                "ok".to_string(),
+            )
+            .with_data(FragmentData::Eval(EvalSummary {
+                job_count: jobs,
+                omitted_by_tags: Default::default(),
+                base_rev: None,
+            }))
+        };
+        let fragments: std::collections::BTreeMap<String, Fragment> = [
+            ("base.eval".to_string(), eval("base.eval", 7228)),
+            ("head.eval".to_string(), eval("head.eval", 7230)),
+        ]
+        .into();
+        assert_eq!(crate::github::markdown::job_count(&fragments), Some(14458));
+    }
+
+    #[test]
     fn hostile_input_matches_its_goldens() {
         let (report, fragments) = scenarios::hostile();
         check_text(
