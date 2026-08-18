@@ -1150,12 +1150,26 @@ fn ci_command(command: CiCommand) -> Result<CommandStatus> {
                         crate::github::surfaces::BOT_AUTHOR,
                         crate::support::effects::Effects::Apply,
                     );
+                    let origin = crate::github::surfaces::origin_comment_url(
+                        &command.origin.repository,
+                        command.origin.pull_request,
+                        command.origin.comment_id,
+                    );
+                    let body = crate::github::sanitize::Markdown::concat([
+                        crate::github::sanitize::Markdown::constant("<sub>"),
+                        crate::github::sanitize::Markdown::html_link(
+                            "\u{21b3} the command that asked",
+                            &origin,
+                        ),
+                        crate::github::sanitize::Markdown::constant("</sub>\n\n"),
+                        crate::github::sanitize::Markdown::constant(untrusted::HELP),
+                    ]);
                     registry.upsert(
                         &crate::github::surfaces::Surface::CiReportReply {
                             comment_id: command.origin.comment_id,
                         },
                         &[],
-                        crate::github::sanitize::Markdown::constant(untrusted::HELP),
+                        body,
                     )?;
                     return Ok(CommandStatus::SUCCESS);
                 }
@@ -1191,9 +1205,15 @@ fn ci_command(command: CiCommand) -> Result<CommandStatus> {
                 crate::support::error::Error::Request("a reply needs --pull-request".into())
             })?;
             let repository = surface.repository(&repo)?;
+            let origin = crate::github::surfaces::origin_comment_url(
+                &repository,
+                pull_request,
+                comment_id,
+            );
             let body = crate::github::markdown::failure_reply(
                 &failure_tail(&failures),
                 surface.run_url.as_deref(),
+                Some(&origin),
             );
             let client =
                 crate::github::client::Client::new(crate::github::client::token().as_deref());

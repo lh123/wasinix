@@ -175,6 +175,22 @@ fn mutation_registry<'a>(
     )
 }
 
+/// The answering line every mutation reply opens with, so the reply names
+/// the comment it acts on.
+fn reply_origin_line(origin: &crate::ci::origin::Origin) -> crate::github::sanitize::Markdown {
+    use crate::github::sanitize::Markdown;
+    let url = crate::github::surfaces::origin_comment_url(
+        &origin.repository,
+        origin.pull_request,
+        origin.comment_id,
+    );
+    Markdown::concat([
+        Markdown::constant("<sub>"),
+        Markdown::html_link("\u{21b3} the command that asked", &url),
+        Markdown::constant("</sub>\n\n"),
+    ])
+}
+
 fn reply_surface(origin: &crate::ci::origin::Origin) -> crate::github::surfaces::Surface {
     crate::github::surfaces::Surface::Mutation {
         comment_id: origin.comment_id,
@@ -348,7 +364,8 @@ pub fn mutate(repo: &Path, origin_doc: &Path, out_dir: &Path) -> Result<()> {
             registry.upsert(
                 &reply_surface(&command.origin),
                 &[],
-                paused_reply(&state, &pull, &client, &command.origin),
+                reply_origin_line(&command.origin)
+                    .push(paused_reply(&state, &pull, &client, &command.origin)),
             )?;
             return request_error(
                 "automated refreshes are paused: the branch moved past the recorded head",
@@ -555,7 +572,11 @@ pub fn mutate_publish(repo: &Path, out_dir: &Path) -> Result<()> {
     }
     let client = Client::new(Some(&token));
     let mut registry = mutation_registry(&client, &context.origin);
-    registry.upsert(&reply_surface(&context.origin), &[], body)?;
+    registry.upsert(
+        &reply_surface(&context.origin),
+        &[],
+        reply_origin_line(&context.origin).push(body),
+    )?;
 
     if context.record_state {
         let recipe = context.recipe.clone().ok_or_else(|| {

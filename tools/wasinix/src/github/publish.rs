@@ -109,7 +109,7 @@ pub(crate) fn load_running(
     }))
 }
 
-fn links(_rendered: &Rendered, target: &Target) -> Links {
+fn links(_rendered: &Rendered, target: &Target, reply_to: Option<u64>) -> Links {
     Links {
         run_url: target.run_url.clone(),
         sha: target
@@ -117,6 +117,16 @@ fn links(_rendered: &Rendered, target: &Target) -> Links {
             .as_deref()
             .and_then(|sha| crate::support::atoms::Rev::parse(sha).ok()),
         log_base: target.log_base.clone(),
+        origin: match (reply_to, target.pull_request) {
+            (Some(comment_id), Some(pull_request)) => Some(
+                crate::github::surfaces::origin_comment_url(
+                    &target.repository,
+                    pull_request,
+                    comment_id,
+                ),
+            ),
+            _ => None,
+        },
     }
 }
 
@@ -206,7 +216,7 @@ pub fn comment(
     let pull_request = target.pull_request.ok_or_else(|| {
         crate::support::error::Error::Request("publishing a comment needs a pull request".into())
     })?;
-    let links = links(rendered, target);
+    let links = links(rendered, target, reply_to);
     let body = with_notice(
         markdown::comment(
             &rendered.report,
@@ -245,7 +255,7 @@ pub fn check(
     let head_sha = target.head_sha.as_deref().ok_or_else(|| {
         crate::support::error::Error::Request("publishing a check needs the head sha".into())
     })?;
-    let links = links(rendered, target);
+    let links = links(rendered, target, None);
     let projected = markdown::check(&rendered.report, &rendered.fragments, &links);
     let mut body = json!({
         "name": "Wasinix CI",
@@ -415,7 +425,7 @@ pub fn step_summary(
     effects: crate::support::effects::Effects,
 ) -> Result<()> {
     use std::io::Write;
-    let links = links(rendered, target);
+    let links = links(rendered, target, None);
     let text = markdown::truncate_sections(
         with_notice(
             markdown::step_summary(&rendered.report, &rendered.fragments, &links),

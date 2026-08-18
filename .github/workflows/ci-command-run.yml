@@ -340,7 +340,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/issues/${{ github.event.issue.number }}/comments" \
-            -f body="❌ \`/wasinix\` mutation commands only work on wasix-org/wasinix pull requests." >/dev/null
+            -f body="❌ \`/wasinix\` mutation commands only work on wasix-org/wasinix pull requests. (acting on ${{ github.event.comment.html_url }})" >/dev/null
 
   # a command must never fail silently: authorization and run errors reply
   # to the comment that asked. When Post report already published the honest
@@ -391,4 +391,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/issues/${{ github.event.issue.number }}/comments" \
-            -f body="❌ \`/wasinix\` command failed before it could report; see the [Actions run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)." >/dev/null
+            -f body="❌ \`/wasinix\` command failed before it could report; see the [Actions run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). (acting on ${{ github.event.comment.html_url }})" >/dev/null

@@ -1965,6 +1965,7 @@ mod markdown {
             run_url: Some("https://github.com/wasix-org/wasinix/actions/runs/1".into()),
             sha: Some(Rev::parse(&"a".repeat(40)).unwrap()),
             log_base: None,
+            origin: None,
         }
     }
 
@@ -1975,6 +1976,7 @@ mod markdown {
             run_url: Some("https://ci.example/runs/1)|end".into()),
             sha: Some(Rev::parse(&"a".repeat(40)).unwrap()),
             log_base: Some("https://ci.example/logs)|base".into()),
+            origin: Some("https://github.com/wasix-org/wasinix/pull/7#issuecomment-9".into()),
         }
     }
 
@@ -2079,12 +2081,15 @@ mod markdown {
         let body = crate::github::markdown::failure_reply(
             "log line\n```\n### forged",
             Some("https://ci.example/run"),
+            Some("https://github.com/wasix-org/wasinix/pull/7#issuecomment-9"),
         )
         .into_string();
-        assert!(body.starts_with("❌ `/wasinix` command failed:"));
+        assert!(body.starts_with(
+            "<sub><a href=\"https://github.com/wasix-org/wasinix/pull/7#issuecomment-9\">\u{21b3} the command that asked</a></sub>\n\n❌ `/wasinix` command failed:"
+        ));
         assert!(body.contains("````text\nlog line\n```\n### forged\n````"));
         assert!(body.contains("[Actions run](https://ci.example/run)"));
-        let empty = crate::github::markdown::failure_reply("  ", None).into_string();
+        let empty = crate::github::markdown::failure_reply("  ", None, None).into_string();
         assert!(empty.contains("see the Actions run"));
     }
 

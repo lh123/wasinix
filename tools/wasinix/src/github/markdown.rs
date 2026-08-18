@@ -29,6 +29,21 @@ pub struct Links {
     pub sha: Option<Rev>,
     /// Where per-job failure logs were published; rows link into it.
     pub log_base: Option<String>,
+    /// The command comment this report answers, so a reader can find what
+    /// asked for it even after other commands queued behind it.
+    pub origin: Option<String>,
+}
+
+/// The answering line above a reply's heading.
+fn origin_line(links: &Links) -> Markdown {
+    match &links.origin {
+        Some(url) => Markdown::concat([
+            Markdown::constant("<sub>"),
+            Markdown::html_link("↳ the command that asked", url),
+            Markdown::constant("</sub>\n\n"),
+        ]),
+        None => Markdown::new(),
+    }
 }
 
 impl Links {
@@ -474,12 +489,13 @@ pub fn comment(
     snapshot: Option<&Snapshot>,
     links: &Links,
 ) -> Markdown {
-    match report.conclusion {
+    let body = match report.conclusion {
         None => in_progress(report, snapshot, links),
         Some(Conclusion::Success) => green(report, fragments, links),
         Some(Conclusion::Failure) => failing(report, fragments, links),
         Some(Conclusion::Neutral) => neutral(report, fragments, links),
-    }
+    };
+    origin_line(links).push(body)
 }
 
 fn green(report: &Report, fragments: &BTreeMap<String, Fragment>, links: &Links) -> Markdown {
@@ -769,13 +785,22 @@ pub fn step_summary(
 /// The reply when a `/wasinix` command dies before it can publish a report:
 /// the failure tail fenced so a PR-controlled log line cannot render as
 /// markup, and the run link for the rest.
-pub fn failure_reply(detail: &str, run_url: Option<&str>) -> Markdown {
+pub fn failure_reply(detail: &str, run_url: Option<&str>, origin: Option<&str>) -> Markdown {
     let detail = if detail.trim().is_empty() {
         "see the Actions run"
     } else {
         detail
     };
+    let answering = match origin {
+        Some(url) => Markdown::concat([
+            Markdown::constant("<sub>"),
+            Markdown::html_link("↳ the command that asked", url),
+            Markdown::constant("</sub>\n\n"),
+        ]),
+        None => Markdown::new(),
+    };
     let mut body = Markdown::concat([
+        answering,
         Markdown::constant("❌ `/wasinix` command failed:\n\n"),
         Markdown::fenced(detail, "text"),
     ]);

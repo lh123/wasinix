@@ -92,6 +92,12 @@ pub enum Surface {
     Preview,
 }
 
+/// The web address of the comment a reply answers, so a reader arriving at
+/// the reply can find what asked for it.
+pub fn origin_comment_url(repository: &str, pull_request: u64, comment_id: u64) -> String {
+    format!("https://github.com/{repository}/pull/{pull_request}#issuecomment-{comment_id}")
+}
+
 impl Surface {
     fn name(&self) -> String {
         match self {
