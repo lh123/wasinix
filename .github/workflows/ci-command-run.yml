@@ -42,6 +42,15 @@ jobs:
       pullRequest: ${{ steps.authorize.outputs.pullRequest }}
       headSha: ${{ steps.authorize.outputs.headSha }}
     steps:
+      # First, before any setup: the eye answers "was I heard" within
+      # seconds; whether the command was valid is the reply's job.
+      - name: Acknowledge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content=eyes >/dev/null
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -78,14 +87,6 @@ jobs:
           name: errors-authorize
           path: "*-error.txt"
           if-no-files-found: ignore
-
-      # the reaction comes after parsing, so a typo gets a reply, not an eye
-      - name: Acknowledge
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api "repos/$GITHUB_REPOSITORY/issues/comments/${{ github.event.comment.id }}/reactions" \
-            -f content=eyes >/dev/null
 
       # Help replies and is done: no run, no report, nothing downstream. The
       # run dir argument is required by the verb and untouched by help.
