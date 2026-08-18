@@ -50,7 +50,9 @@ produce.
 Work built without `--push-cache` is pushed retroactively by
 `wasinix cache push [selectors]`: it reuses the working tree's recorded
 evaluation (evaluating locally when none exists), skips what the cache already
-holds, and needs `NIX_SIGNING_KEY`.
+holds, and needs `NIX_SIGNING_KEY`. If you hold the key, push what you built:
+the next CI run substitutes instead of rebuilding, which saves billable runner
+minutes and everyone's queue time.
 
 Cached jobs are skipped for you by the build driver's dry-run plan: a job
 already in the cache costs neither a build nor a download. On a warm cache the
@@ -83,6 +85,10 @@ budget through the environment the CLI reads:
 ```sh
 WASINIX_EVAL_WORKERS=4 WASINIX_EVAL_MEMORY=8192 wasinix build all --on local
 ```
+
+The build tail's parallelism is a separate knob: `WASINIX_MAX_JOBS` caps
+concurrent derivations for a local build (default: every core). Remote builders
+carry their own limits in `remotes.toml` instead.
 
 ## Build one thing
 
