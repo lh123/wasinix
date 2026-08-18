@@ -50,7 +50,7 @@ runs:
         # the S3 substituter and a compile.
         path: ~/.cache/wasinix-bin
         key:
-          wasinix-bin-v1-${{ hashFiles('tools/wasinix/**', 'flake.nix',
+          wasinix-bin-v2-${{ hashFiles('tools/wasinix/**', 'flake.nix',
           'flake.lock') }}
 
     - name: Provide the wasinix binary
@@ -67,6 +67,10 @@ runs:
         nix build .#wasinix --no-link
         nix copy --to "$store" .#wasinix \
           || echo "closure cache save failed; the next run builds again"
+        # Tripwire for a poisoned entry: the two counts must match, and the
+        # names must be the binary's closure, not alien litter.
+        echo "closure: $(nix path-info -r .#wasinix | wc -l) paths built," \
+          "$(ls "$HOME/.cache/wasinix-bin/"*.narinfo 2>/dev/null | wc -l) in the cache dir"
 
     - name: Save the wasinix binary closure
       if:
@@ -76,5 +80,5 @@ runs:
       with:
         path: ~/.cache/wasinix-bin
         key:
-          wasinix-bin-v1-${{ hashFiles('tools/wasinix/**', 'flake.nix',
+          wasinix-bin-v2-${{ hashFiles('tools/wasinix/**', 'flake.nix',
           'flake.lock') }}
