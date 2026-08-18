@@ -17,7 +17,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     ghc-wasm-meta = {
-      url = "gitlab:haskell-wasm/ghc-wasm-meta?host=gitlab.haskell.org";
+      # The official read-only mirror of gitlab.haskell.org/haskell-wasm:
+      # same commits, narHash-verified, and CI already depends on github,
+      # so a gitlab outage cannot take evaluation down with it.
+      url = "github:haskell-wasm/ghc-wasm-meta";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
