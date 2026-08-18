@@ -3038,6 +3038,7 @@ mod corpus {
             "diff",
             "bisect",
             "jobs",
+            "cache push",
             "run start",
             "run list",
             "run status",
@@ -5039,7 +5040,26 @@ mod table {
 
 
 mod buildset {
-    use crate::nix::buildset::{dry_run_plan, realise_building_drv};
+    use crate::nix::buildset::{dry_run_plan, prebuilt_partition, realise_building_drv};
+
+    #[test]
+    fn the_prebuilt_partition_pushes_only_local_never_pushed_outputs() {
+        let plan = dry_run_plan(
+            "these 1 derivations will be built:\n  /nix/store/a.drv\nthese 1 paths will be fetched (1.0 MiB download, 2.0 MiB unpacked):\n  /nix/store/b-out\n",
+        )
+        .unwrap();
+        let outputs: std::collections::BTreeMap<String, Vec<String>> = [
+            ("/nix/store/a.drv".to_string(), vec!["/nix/store/a-out".into()]),
+            ("/nix/store/b.drv".to_string(), vec!["/nix/store/b-out".into()]),
+            ("/nix/store/c.drv".to_string(), vec!["/nix/store/c-out".into()]),
+        ]
+        .into();
+        let report = prebuilt_partition(&outputs, &plan);
+        assert_eq!(report.unbuilt, 1);
+        assert_eq!(report.in_cache, 1);
+        assert_eq!(report.candidates, 1);
+        assert_eq!(report.push, ["/nix/store/c-out"]);
+    }
     use crate::nix::evaljobs;
 
     #[test]

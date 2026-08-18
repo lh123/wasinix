@@ -238,7 +238,7 @@ impl Domain {
                         .aliases
                         .iter()
                         .any(|alias| segment_matches(alias, &spec.segments[0])))
-                    || (!glob && entry.aliases.iter().any(|alias| *alias == flat));
+                    || (!glob && entry.aliases.contains(&flat));
                 let by_path = entry.path_forms().into_iter().any(|form| {
                     (!glob && form.join(".") == flat)
                         || (form.len() == spec.segments.len()

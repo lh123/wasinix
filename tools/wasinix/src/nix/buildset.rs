@@ -361,6 +361,69 @@ impl Uploader {
     }
 }
 
+pub struct PrebuiltPush {
+    pub push: Vec<String>,
+    pub candidates: usize,
+    pub in_cache: usize,
+    pub unbuilt: usize,
+}
+
+/// Partition evaluated job outputs for a retroactive push: drvs the dry-run
+/// would build are not built here, outputs it would fetch are in the cache
+/// already, and the rest is locally valid and never pushed.
+pub(crate) fn prebuilt_partition(
+    outputs_by_drv: &BTreeMap<String, Vec<String>>,
+    plan: &DryRunPlan,
+) -> PrebuiltPush {
+    let mut report = PrebuiltPush {
+        push: Vec::new(),
+        candidates: 0,
+        in_cache: 0,
+        unbuilt: 0,
+    };
+    for (drv, outputs) in outputs_by_drv {
+        if plan.to_build.contains(drv) {
+            report.unbuilt += 1;
+            continue;
+        }
+        let local: Vec<String> = outputs
+            .iter()
+            .filter(|output| !plan.fetched.contains(*output))
+            .cloned()
+            .collect();
+        if local.is_empty() {
+            report.in_cache += 1;
+            continue;
+        }
+        report.candidates += 1;
+        report.push.extend(local);
+    }
+    report
+}
+
+/// Push everything already built for these jobs that the cache lacks.
+/// `nix copy` skips paths the cache turns out to hold, so the candidate
+/// count is an upper bound on what actually transfers.
+pub fn push_prebuilt(
+    outputs_by_drv: &BTreeMap<String, Vec<String>>,
+    route: &crate::nix::route::Route,
+) -> Result<PrebuiltPush> {
+    let Some(key) = SigningKey::take()? else {
+        return request_error("pushing to the cache needs NIX_SIGNING_KEY");
+    };
+    let plan = crate::support::nix::Invocation::tool("nix-store")
+        .args(["--realise", "--dry-run"])
+        .operands(outputs_by_drv.keys().cloned())
+        .route(route)?
+        .probe("the dry-run plan partitions cached from to-build")?;
+    let plan = dry_run_plan(&plan.stderr)?;
+    let report = prebuilt_partition(outputs_by_drv, &plan);
+    let uploader = Uploader::start(Some(key.store()));
+    uploader.push(report.push.clone());
+    uploader.finish();
+    Ok(report)
+}
+
 const BUILD_ATTEMPTS: usize = 3;
 
 /// Build every case's selected jobs from their evaluated derivations,

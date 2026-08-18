@@ -47,6 +47,11 @@ input-addressed and baselines are keyed by the materialized git tree, so every
 keyed run pushes what it builds and no run can publish under a key it did not
 produce.
 
+Work built without `--push-cache` is pushed retroactively by
+`wasinix cache push [selectors]`: it reuses the working tree's recorded
+evaluation (evaluating locally when none exists), skips what the cache already
+holds, and needs `NIX_SIGNING_KEY`.
+
 Cached jobs are skipped for you by the build driver's dry-run plan: a job
 already in the cache costs neither a build nor a download. On a warm cache the
 sweep is an eval plus whatever the change genuinely rebuilds. That only holds

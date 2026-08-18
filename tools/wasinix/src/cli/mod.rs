@@ -72,6 +72,9 @@ pub enum CommandTree {
         #[command(flatten)]
         json: ui::JsonArg,
     },
+    /// The shared binary cache
+    #[command(subcommand)]
+    Cache(CacheCommand),
     /// Start and inspect durable runs
     #[command(subcommand)]
     Run(RunCommand),
@@ -147,6 +150,18 @@ pub struct SpotArgs {
     pub placement: request::PlacementArg,
     #[command(flatten)]
     pub mode: ModeArgs,
+}
+
+#[derive(clap::Subcommand)]
+pub enum CacheCommand {
+    /// Push outputs already built for this working tree that the cache lacks
+    Push {
+        /// Job selectors, as in `build`; everything evaluated when empty
+        #[arg(add = clap_complete::ArgValueCandidates::new(request::selector_candidates))]
+        selectors: Vec<String>,
+        #[command(flatten)]
+        json: ui::JsonArg,
+    },
 }
 
 #[derive(clap::Subcommand)]
@@ -449,6 +464,129 @@ fn jobs_command(pattern: Option<String>, json: ui::JsonArg) -> Result<CommandSta
             ui::result(name);
         }
     })?;
+    Ok(CommandStatus::SUCCESS)
+}
+
+/// The newest local run whose materialized tree matches, and its eval map:
+/// a build of this exact content already answered what the jobs are.
+fn recorded_eval(tree: &str) -> Result<Option<(String, crate::ci::evalmap::EvalMap)>> {
+    for run in runs::list()? {
+        let run_dir = runs::dir_of(&run.run_id)?;
+        let Ok(entries) = std::fs::read_dir(crate::ci::prepare::cases_dir(&run_dir)) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let case = entry.path();
+            let manifest: crate::ci::workspace::Materialization =
+                match schema::read(&case.join("prepared/materialization.json")) {
+                    Ok(manifest) => manifest,
+                    Err(_) => continue,
+                };
+            if manifest.tree != tree {
+                continue;
+            }
+            if let Ok(map) = schema::read::<crate::ci::evalmap::EvalMap>(
+                &crate::ci::prepare::eval_map_path(&case),
+            ) {
+                return Ok(Some((run.run_id, map)));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn cache_command(command: CacheCommand) -> Result<CommandStatus> {
+    let CacheCommand::Push { selectors, json } = command;
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CachePush {
+        candidates: usize,
+        in_cache: usize,
+        unbuilt: usize,
+        paths: usize,
+    }
+    impl schema::Document for CachePush {
+        const KIND: &'static str = "cachePush";
+        const SCHEMA: u32 = 1;
+    }
+
+    // Checked before the worktree and a possible evaluation are paid for.
+    if crate::support::env::signing_key()?.is_none() {
+        return crate::support::error::request_error("pushing to the cache needs NIX_SIGNING_KEY");
+    }
+    let repo = crate::support::git::repo_root()?;
+    let (worktree, rev, tree) = crate::ci::workspace::working_worktree(&repo)?;
+    let route = crate::nix::route::Route::from_on(&repo, Some("local"))?;
+    let map = match recorded_eval(&tree)? {
+        Some((run_id, map)) => {
+            ui::fact("evaluation", format!("recorded by run {run_id}"));
+            map
+        }
+        None => {
+            ui::fact("evaluation", "none recorded for this tree; evaluating locally");
+            let scratch = crate::support::env::temp_dir()
+                .join(format!("wasinix-cache-push-{}", std::process::id()));
+            crate::support::fs::create_dir_all(&scratch)?;
+            let jobs_path = scratch.join("jobs.jsonl");
+            let attr = format!(
+                ".#legacyPackages.{}.ciSets.all",
+                crate::support::nix::SYSTEM
+            );
+            if let Some(error) = crate::nix::evaljobs::run(&crate::nix::evaljobs::RunRequest {
+                workdir: worktree.path(),
+                flake: &attr,
+                jobs_path: &jobs_path,
+                stderr_log: &scratch.join("evaluate.log"),
+                offline: false,
+                check_cache: false,
+                route: &route,
+            })? {
+                return Err(crate::support::error::Error::Failure(format!(
+                    "evaluation failed: {error}"
+                )));
+            }
+            let jobs = crate::nix::evaljobs::parse_file(&crate::support::fs::read_to_string(
+                &jobs_path,
+            )?)?;
+            crate::ci::evalmap::EvalMap::from_jobs(rev, &jobs)
+        }
+    };
+    drop(worktree);
+
+    let jobs: Vec<String> = if selectors.is_empty() {
+        map.jobs.keys().map(|job| job.as_str().to_string()).collect()
+    } else {
+        map.resolve_jobs(&selectors)?
+    };
+    let mut outputs_by_drv: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for job in &jobs {
+        let Some(drv) = map.jobs.get(job.as_str()) else {
+            continue;
+        };
+        let outputs: Vec<String> = map
+            .outputs
+            .get(job.as_str())
+            .map(|outputs| outputs.values().cloned().collect())
+            .unwrap_or_default();
+        outputs_by_drv.entry(drv.clone()).or_insert(outputs);
+    }
+
+    let report = crate::nix::buildset::push_prebuilt(&outputs_by_drv, &route)?;
+    ui::emit(
+        &json,
+        &CachePush {
+            candidates: report.candidates,
+            in_cache: report.in_cache,
+            unbuilt: report.unbuilt,
+            paths: report.push.len(),
+        },
+        |push| {
+            ui::result(format!(
+                "{} jobs pushed ({} paths) · {} already cached · {} not built here",
+                push.candidates, push.paths, push.in_cache, push.unbuilt
+            ));
+        },
+    )?;
     Ok(CommandStatus::SUCCESS)
 }
 
@@ -1119,6 +1257,7 @@ fn run(command: CommandTree) -> Result<CommandStatus> {
         CommandTree::Diff(args) => request::run_diff(&crate::support::git::repo_root()?, args),
         CommandTree::Bisect(args) => bisect::run_bisect(&crate::support::git::repo_root()?, args),
         CommandTree::Jobs { pattern, json } => jobs_command(pattern, json),
+        CommandTree::Cache(command) => cache_command(command),
         CommandTree::Run(command) => run_command(command),
         CommandTree::Cargo(command) => registries::run_cargo(command),
         CommandTree::Wasmer(command) => registries::run_wasmer(command),

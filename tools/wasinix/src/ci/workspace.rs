@@ -26,6 +26,17 @@ pub fn working_patch(repo: &Path) -> Result<String> {
     git_raw(repo, &["diff", "--binary", "HEAD"])
 }
 
+/// The working tree materialized into a disposable worktree, with the tree
+/// object id that keys evaluations recorded for the same content.
+pub fn working_worktree(repo: &Path) -> Result<(Worktree, crate::support::atoms::Rev, String)> {
+    let rev = crate::support::atoms::Rev::parse(&git(repo, &["rev-parse", "HEAD"])?)?;
+    let worktree = Worktree::add(repo, rev.full())?;
+    apply_patch(worktree.path(), &working_patch(repo)?)?;
+    git(worktree.path(), &["add", "-A"])?;
+    let tree = git(worktree.path(), &["write-tree"])?;
+    Ok((worktree, rev, tree))
+}
+
 fn apply_patch(worktree: &Path, patch: &str) -> Result<()> {
     if patch.is_empty() {
         return Ok(());
