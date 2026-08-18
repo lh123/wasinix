@@ -53,9 +53,13 @@ runs:
       if: inputs.wasinix-binary == 'true'
       shell: bash
       run: |
+        # The cache is an optimization: a torn or stale entry falls back to
+        # the build, never fails the job.
         store="file://$HOME/.cache/wasinix-bin"
         if [ -e "$HOME/.cache/wasinix-bin/nix-cache-info" ]; then
-          nix copy --from "$store" --all --no-check-sigs
+          nix copy --from "$store" --all --no-check-sigs \
+            || echo "closure cache import failed; building instead"
         fi
         nix build .#wasinix --no-link
-        nix copy --to "$store" .#wasinix
+        nix copy --to "$store" .#wasinix \
+          || echo "closure cache save failed; the next run builds again"
