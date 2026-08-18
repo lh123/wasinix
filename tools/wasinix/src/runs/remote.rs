@@ -69,6 +69,11 @@ impl Drop for TemporaryFiles {
 
 fn copy_to_host(builder: &Builder, local: &Path, remote_path: &str) -> Result<()> {
     let mut cmd = builder.scp(Deadline::Transfer)?;
+    // scp's progress meter fights the progress ticker for the terminal's
+    // last line; -v keeps it for anyone watching the raw transfer.
+    if crate::support::ui::verbosity() != crate::support::ui::Verbosity::Verbose {
+        cmd.arg("-q");
+    }
     cmd.arg(local)
         .arg(format!("{}:{remote_path}", builder.host));
     tools::log(&cmd);
@@ -191,6 +196,9 @@ fn fetch_run(builder: &Builder, run_dir: &str, fetch_to: &Path) -> Result<()> {
     crate::support::fs::create_dir_all(fetch_to)?;
     let scratch = crate::support::fs::Scratch::create("wasinix-fetch")?;
     let mut cmd = builder.scp(Deadline::Transfer)?;
+    if crate::support::ui::verbosity() != crate::support::ui::Verbosity::Verbose {
+        cmd.arg("-q");
+    }
     cmd.arg("-r")
         .arg(format!("{}:{run_dir}/.", builder.host))
         .arg(scratch.path());

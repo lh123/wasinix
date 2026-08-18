@@ -338,12 +338,22 @@ impl Uploader {
         if batch.is_empty() {
             return;
         }
+        // Captured, not inherited: nix's transfer chatter on stderr would
+        // fight the progress ticker for the terminal's last line.
         let copied = crate::support::nix::Invocation::plain("copy")
             .args(["--to", store])
             .operands(batch.drain(..))
-            .status();
-        if !matches!(copied, Ok(status) if status.is_success()) {
-            crate::support::ui::warning("cache push failed (non-fatal)");
+            .command()
+            .and_then(|mut cmd| crate::support::tools::output(&mut cmd));
+        match copied {
+            Ok(output) if output.status.success() => {}
+            Ok(output) => crate::support::ui::warning(format!(
+                "cache push failed (non-fatal): {}",
+                crate::support::error::tail(&String::from_utf8_lossy(&output.stderr), 300)
+            )),
+            Err(error) => {
+                crate::support::ui::warning(format!("cache push failed (non-fatal): {error}"))
+            }
         }
     }
 
