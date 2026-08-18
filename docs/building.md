@@ -17,7 +17,7 @@ The `--on` axis chooses where every expensive verb runs: `--on local` here,
 `--on <remote>` on a configured builder, or `--on <remote>:<route>` to pick the
 route (`builder`, `store`, or `host`). Absent, it uses the configured default
 remote. `wasinix remote list` shows what is configured; `wasinix remote doctor`
-verifies one. Remotes live in `remotes.toml` (`$XDG_CONFIG_HOME/wasinix/`),
+verifies one. Builders live in `builders.toml` (`$XDG_CONFIG_HOME/wasinix/`),
 never in the flake; `wasinix remote init` writes a commented template.
 
 ```sh
@@ -87,8 +87,10 @@ WASINIX_EVAL_WORKERS=4 WASINIX_EVAL_MEMORY=8192 wasinix build all --on local
 ```
 
 The build tail's parallelism is a separate knob: `WASINIX_MAX_JOBS` caps
-concurrent derivations for a local build (default: every core). Remote builders
-carry their own limits in `remotes.toml` instead.
+concurrent derivations for a local build (default: every core). Persistent local
+limits, including a `capacity` bounding concurrent local runs, live in the
+`[local]` table of `builders.toml`; the environment overrides them per
+invocation, and remote builders carry their own limits in their profiles.
 
 ## Build one thing
 

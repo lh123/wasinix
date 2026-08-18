@@ -29,3 +29,11 @@ route = "store"
 capacity = 2
 eval_workers = 2
 eval_memory = 8192
+
+# Limits for `--on local`; each env var (WASINIX_MAX_JOBS, ...) overrides
+# per invocation. capacity bounds concurrent local runs; unset = unlimited.
+# [local]
+# max_jobs = 8
+# eval_workers = 2
+# eval_memory = 8192
+# capacity = 1

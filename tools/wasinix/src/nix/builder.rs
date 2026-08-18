@@ -83,9 +83,23 @@ pub struct Builder {
 }
 
 #[derive(Debug, Deserialize)]
-struct Registry {
+pub(crate) struct Registry {
     default: String,
     remotes: BTreeMap<String, Profile>,
+    #[serde(default)]
+    pub(crate) local: Option<LocalProfile>,
+}
+
+/// The `[local]` profile: persistent limits for `--on local`, each
+/// overridable per invocation by its environment variable.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LocalProfile {
+    pub max_jobs: Option<usize>,
+    pub eval_workers: Option<usize>,
+    pub eval_memory: Option<usize>,
+    /// Concurrent local runs; unset means unlimited, as before.
+    pub capacity: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,10 +132,24 @@ fn or_home(dir: Option<PathBuf>, fallback: &str) -> Result<PathBuf> {
 }
 
 pub fn config_path() -> Result<PathBuf> {
-    if let Some(path) = crate::support::env::wasinix_remotes() {
+    if crate::support::env::legacy_remotes_set() {
+        return request_error(
+            "WASINIX_REMOTES was renamed: set WASINIX_BUILDERS (the file is builders.toml now)",
+        );
+    }
+    if let Some(path) = crate::support::env::wasinix_builders() {
         return Ok(path);
     }
-    Ok(or_home(crate::support::env::xdg_config_home(), ".config")?.join("wasinix/remotes.toml"))
+    let config = or_home(crate::support::env::xdg_config_home(), ".config")?.join("wasinix");
+    let path = config.join("builders.toml");
+    if !path.exists() && config.join("remotes.toml").exists() {
+        return request_error(format!(
+            "remotes.toml was renamed: mv {} {}",
+            config.join("remotes.toml").display(),
+            path.display()
+        ));
+    }
+    Ok(path)
 }
 
 pub fn runtime_dir() -> Result<PathBuf> {
@@ -145,9 +173,12 @@ fn read_registry() -> Result<Option<Registry>> {
     if !path.exists() {
         return Ok(None);
     }
-    let registry: Registry =
-        toml::from_str(&crate::support::fs::read_to_string(&path)?)
-            .map_err(|error| Error::Request(format!("{}: {error}", path.display())))?;
+    parse_registry(&crate::support::fs::read_to_string(&path)?, &path).map(Some)
+}
+
+pub(crate) fn parse_registry(text: &str, path: &Path) -> Result<Registry> {
+    let registry: Registry = toml::from_str(text)
+        .map_err(|error| Error::Request(format!("{}: {error}", path.display())))?;
     if !valid_name(&registry.default) {
         return request_error(format!(
             "invalid default remote name {:?}",
@@ -160,7 +191,35 @@ fn read_registry() -> Result<Option<Registry>> {
             path.display()
         ));
     }
-    Ok(Some(registry))
+    // `--on local` and the local lease directory both own the name.
+    if registry.remotes.contains_key("local") {
+        return request_error(format!(
+            "{}: \"local\" is not a remote name; its limits go in the [local] table",
+            path.display()
+        ));
+    }
+    if let Some(local) = &registry.local {
+        if [local.max_jobs, local.eval_workers, local.eval_memory, local.capacity]
+            .contains(&Some(0))
+        {
+            return request_error(format!(
+                "{}: [local] limits must be positive integers",
+                path.display()
+            ));
+        }
+    }
+    Ok(registry)
+}
+
+/// The `[local]` profile, empty when no config file or table exists. Inert
+/// under test, where the developer's real config would leak into limits.
+pub fn local_profile() -> Result<LocalProfile> {
+    if cfg!(test) {
+        return Ok(LocalProfile::default());
+    }
+    Ok(read_registry()?
+        .and_then(|registry| registry.local)
+        .unwrap_or_default())
 }
 
 fn from_profile(name: String, profile: Profile) -> Result<Builder> {
@@ -233,7 +292,7 @@ fn load_legacy(repo: &Path) -> Result<Builder> {
     let path = repo.join(".remote-builder");
     if !path.is_file() {
         return request_error(format!(
-            "no remote is configured: create {} (copy remotes.toml.example) or the legacy {}",
+            "no remote is configured: create {} (copy builders.toml.example) or the legacy {}",
             config_path()?.display(),
             path.display()
         ));
@@ -532,6 +591,13 @@ fn process_start_ticks(pid: u32) -> Option<u64> {
 pub fn acquire(builder: &Builder) -> Result<Lease> {
     let root = runtime_dir()?.join("leases").join(&builder.name);
     acquire_slots(&root, builder.capacity, &format!("remote {:?}", builder.name))
+}
+
+/// A slot against the `[local]` capacity, so concurrent local runs cannot
+/// oversubscribe the machine. `parse_registry` keeps the name free.
+pub fn acquire_local(capacity: usize) -> Result<Lease> {
+    let root = runtime_dir()?.join("leases").join("local");
+    acquire_slots(&root, capacity, "local builds")
 }
 
 /// One slot out of `capacity` under `root`, stamped with this process's pid;

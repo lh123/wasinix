@@ -3700,6 +3700,32 @@ mod builder {
     use crate::nix::builder::known_hosts_line;
 
     #[test]
+    fn the_local_profile_parses_validated_and_owns_its_name() {
+        use crate::nix::builder::parse_registry;
+        let path = std::path::Path::new("builders.toml");
+        let base = "default = \"ec2\"\n[remotes.ec2]\nhost = \"h\"\nkey = \"k\"\ncapabilities = [\"builder\"]\n";
+        let registry =
+            parse_registry(&format!("{base}[local]\nmax_jobs = 8\ncapacity = 1\n"), path).unwrap();
+        let local = registry.local.unwrap();
+        assert_eq!(local.max_jobs, Some(8));
+        assert_eq!(local.capacity, Some(1));
+        assert_eq!(local.eval_workers, None);
+
+        let zero = parse_registry(&format!("{base}[local]\ncapacity = 0\n"), path)
+            .unwrap_err()
+            .to_string();
+        assert!(zero.contains("positive"), "{zero}");
+        assert!(parse_registry(&format!("{base}[local]\nmaxjobs = 8\n"), path).is_err());
+        let shadowed = parse_registry(
+            "default = \"local\"\n[remotes.local]\nhost = \"h\"\nkey = \"k\"\ncapabilities = [\"builder\"]\n",
+            path,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(shadowed.contains("[local]"), "{shadowed}");
+    }
+
+    #[test]
     fn host_keys_pin_in_known_hosts_form_from_either_encoding() {
         use base64::Engine;
         let line = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPZU root@ip-10-240-186-88\n";

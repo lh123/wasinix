@@ -34,7 +34,7 @@ pub enum RemoteCommand {
         field: BuilderField,
         remote: Option<String>,
     },
-    /// Write a commented remotes.toml template to the config path
+    /// Write a commented builders.toml template to the config path
     Init,
 }
 
@@ -211,7 +211,7 @@ fn field(repo: &Path, remote: Option<&str>, field: BuilderField) -> Result<Comma
     Ok(CommandStatus::SUCCESS)
 }
 
-const TEMPLATE: &str = r#"# Remotes shared by this developer's worktrees. `wasinix remote doctor`
+const TEMPLATE: &str = r#"# Builders shared by this developer's worktrees. `wasinix remote doctor`
 # verifies an entry; `--on <name>` uses one.
 #
 # default = "ec2"
@@ -224,6 +224,14 @@ const TEMPLATE: &str = r#"# Remotes shared by this developer's worktrees. `wasin
 # # raw line; "-" pins nothing and accepts the key on first connection
 # host_key = "-"
 # capabilities = ["builder", "store", "host"]
+# capacity = 1
+#
+# Limits for `--on local`; each env var (WASINIX_MAX_JOBS, ...) overrides
+# per invocation. capacity bounds concurrent local runs; unset = unlimited.
+# [local]
+# max_jobs = 8
+# eval_workers = 2
+# eval_memory = 8192
 # capacity = 1
 "#;
 

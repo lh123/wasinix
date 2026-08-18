@@ -108,9 +108,14 @@ pub fn wasinix_remote() -> Result<Option<String>> {
     optional("WASINIX_REMOTE")
 }
 
-/// An explicit remotes.toml location, overriding the config path.
-pub fn wasinix_remotes() -> Option<PathBuf> {
-    path("WASINIX_REMOTES")
+/// An explicit builders.toml location, overriding the config path.
+pub fn wasinix_builders() -> Option<PathBuf> {
+    path("WASINIX_BUILDERS")
+}
+
+/// The pre-rename spelling, detected only to refuse it loudly.
+pub fn legacy_remotes_set() -> bool {
+    std::env::var_os("WASINIX_REMOTES").is_some()
 }
 
 pub fn eval_workers() -> Result<Option<usize>> {

@@ -23,10 +23,13 @@ pub struct EvaluationLimits {
 
 impl EvaluationLimits {
     pub fn local() -> Result<Self> {
+        let profile = builder::local_profile()?;
         Ok(Self {
             workers: crate::support::env::eval_workers()?
+                .or(profile.eval_workers)
                 .unwrap_or(DEFAULT_LOCAL_EVAL_WORKERS),
             memory: crate::support::env::eval_memory()?
+                .or(profile.eval_memory)
                 .unwrap_or(DEFAULT_EVAL_MEMORY),
             timeout: evaluation_timeout()?,
         })
@@ -58,7 +61,9 @@ pub fn evaluation_timeout() -> Result<Duration> {
 }
 
 pub fn max_jobs(default: usize) -> Result<usize> {
-    Ok(crate::support::env::max_jobs()?.unwrap_or(default))
+    Ok(crate::support::env::max_jobs()?
+        .or(builder::local_profile()?.max_jobs)
+        .unwrap_or(default))
 }
 
 #[derive(Debug, Clone)]
@@ -147,6 +152,12 @@ impl Route {
     }
 
     pub fn acquire(&self) -> Result<Option<Lease>> {
+        if matches!(self, Route::Local(_)) {
+            return match builder::local_profile()?.capacity {
+                Some(capacity) => builder::acquire_local(capacity).map(Some),
+                None => Ok(None),
+            };
+        }
         self.builder().map(builder::acquire).transpose()
     }
 
