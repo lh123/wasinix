@@ -1259,7 +1259,7 @@ fn ci_command(command: CiCommand) -> Result<CommandStatus> {
                     let body = crate::github::sanitize::Markdown::concat([
                         crate::github::sanitize::Markdown::constant("<sub>"),
                         crate::github::sanitize::Markdown::html_link(
-                            "\u{21b3} the command that asked",
+                            "\u{21b3} in reply to this command",
                             &origin,
                         ),
                         crate::github::sanitize::Markdown::constant("</sub>\n\n"),

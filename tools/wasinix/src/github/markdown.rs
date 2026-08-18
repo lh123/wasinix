@@ -39,7 +39,7 @@ fn origin_line(links: &Links) -> Markdown {
     match &links.origin {
         Some(url) => Markdown::concat([
             Markdown::constant("<sub>"),
-            Markdown::html_link("↳ the command that asked", url),
+            Markdown::html_link("↳ in reply to this command", url),
             Markdown::constant("</sub>\n\n"),
         ]),
         None => Markdown::new(),
@@ -818,7 +818,7 @@ pub fn failure_reply(detail: &str, run_url: Option<&str>, origin: Option<&str>) 
     let answering = match origin {
         Some(url) => Markdown::concat([
             Markdown::constant("<sub>"),
-            Markdown::html_link("↳ the command that asked", url),
+            Markdown::html_link("↳ in reply to this command", url),
             Markdown::constant("</sub>\n\n"),
         ]),
         None => Markdown::new(),

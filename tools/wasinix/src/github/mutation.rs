@@ -186,7 +186,7 @@ fn reply_origin_line(origin: &crate::ci::origin::Origin) -> crate::github::sanit
     );
     Markdown::concat([
         Markdown::constant("<sub>"),
-        Markdown::html_link("\u{21b3} the command that asked", &url),
+        Markdown::html_link("\u{21b3} in reply to this command", &url),
         Markdown::constant("</sub>\n\n"),
     ])
 }

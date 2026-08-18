@@ -2085,7 +2085,7 @@ mod markdown {
         )
         .into_string();
         assert!(body.starts_with(
-            "<sub><a href=\"https://github.com/wasix-org/wasinix/pull/7#issuecomment-9\">\u{21b3} the command that asked</a></sub>\n\n❌ `/wasinix` command failed:"
+            "<sub><a href=\"https://github.com/wasix-org/wasinix/pull/7#issuecomment-9\">\u{21b3} in reply to this command</a></sub>\n\n❌ `/wasinix` command failed:"
         ));
         assert!(body.contains("````text\nlog line\n```\n### forged\n````"));
         assert!(body.contains("[Actions run](https://ci.example/run)"));
