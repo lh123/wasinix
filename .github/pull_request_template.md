@@ -31,4 +31,8 @@ For agents: CI builds and runs the declared tests. Do not list `nix fmt`,
 `git diff --check`, the builder used, or merely that tests ran as evidence that
 behavior works. Describe the behavior and result. Explain non-obvious test
 implementation when it matters to the coverage provided.
+"Not built here" is one sentence; the reason takes at most one more. Impact is
+omitted, not justified as empty. A build mechanism explained in a code comment
+is not paraphrased here. An unbuilt PR is a last resort; prefer waiting for a
+builder slot.
 -->
