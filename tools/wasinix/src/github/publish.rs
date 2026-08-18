@@ -64,7 +64,7 @@ pub fn load(run_dir: &Path) -> Result<Rendered> {
                 run.state
             )));
         }
-        crate::ci::report::from_run_state(&run)
+        crate::ci::report::from_run_state(&run, crate::runs::log_tail(run_dir, 800).as_deref())
     };
     let fragments =
         crate::ci::report::fragments_under(&crate::ci::prepare::fragments_dir(run_dir))?;

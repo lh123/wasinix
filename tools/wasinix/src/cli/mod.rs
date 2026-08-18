@@ -1210,14 +1210,21 @@ fn ci_command(command: CiCommand) -> Result<CommandStatus> {
     }
 }
 
-/// The last bytes of whichever failure files exist, on a char boundary; the
-/// reply quotes an excerpt, the Actions run holds the rest.
-fn failure_tail(paths: &[PathBuf]) -> String {
+/// The last bytes of whichever failure files exist, transfer chatter
+/// dropped, on a char boundary; the reply quotes an excerpt, the Actions
+/// run holds the rest.
+pub(crate) fn failure_tail(paths: &[PathBuf]) -> String {
     const TAIL_BYTES: usize = 1500;
     let mut detail = String::new();
     for path in paths {
         if let Ok(text) = std::fs::read_to_string(path) {
-            detail.push_str(&text);
+            for line in text
+                .lines()
+                .filter(|line| !crate::support::nix::progress_noise(line))
+            {
+                detail.push_str(line);
+                detail.push('\n');
+            }
         }
     }
     let mut start = detail.len().saturating_sub(TAIL_BYTES);

@@ -1,7 +1,8 @@
-### ❌ Wasinix CI · CI lost its runner before finishing · [run](https://github.com/wasix-org/wasinix/actions/runs/1) · `aaaaaaaaaaaa`
+### ❌ Wasinix CI · 1 failed task · [run](https://github.com/wasix-org/wasinix/actions/runs/1) · `aaaaaaaaaaaa`
 
+- Run · error: the payload died
 
-<sub><a href="https://github.com/wasix-org/wasinix/actions/runs/1">full pipeline</a></sub>
+<sub>run: Run ❌<br><a href="https://github.com/wasix-org/wasinix/actions/runs/1">full pipeline</a></sub>
 
 <details><summary>Details</summary>
 
@@ -9,5 +10,6 @@
 
 | task | status | result |
 |:--|:--:|:--|
+| Run | ❌ | error: the payload died |
 
 </details>

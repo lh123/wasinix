@@ -1812,6 +1812,22 @@ mod cli {
     }
 
     #[test]
+    fn failure_tails_drop_transfer_chatter() {
+        let scratch = crate::support::fs::Scratch::create("wasinix-test").unwrap();
+        let path = scratch.path().join("run-error.txt");
+        let mut text = String::new();
+        for index in 0..200 {
+            text.push_str(&format!("copying path '/nix/store/{index}' from 'x'...\n"));
+        }
+        text.push_str("error: the actual failure\n");
+        std::fs::write(&path, text).unwrap();
+        assert_eq!(
+            crate::cli::failure_tail(&[path]),
+            "error: the actual failure\n"
+        );
+    }
+
+    #[test]
     fn start_refuses_wait_and_follow_together() {
         assert!(Cli::try_parse_from([
             "wasinix", "run", "start", "--wait", "--follow", "--", "true"
@@ -2151,7 +2167,11 @@ mod markdown {
             finished_at: Some(1_755_003_600),
             exit_code: None,
         };
-        let report = crate::ci::report::from_run_state(&run);
+        let report = crate::ci::report::from_run_state(
+            &run,
+            Some("copying path '/nix/store/x'\nerror: the payload died\n"),
+        );
+        assert_eq!(report.tasks[0].headline, "error: the payload died");
         check_text(
             "comment-lost.md",
             &comment(&report, &std::collections::BTreeMap::new(), None, &links()).into_string(),
@@ -3760,6 +3780,15 @@ mod remote_runs {
             finished_at: None,
             exit_code,
         }
+    }
+
+    #[test]
+    fn credential_exports_quote_their_values() {
+        let exports = crate::runs::remote::credential_exports(&[(
+            "NIX_SIGNING_KEY".to_string(),
+            "cache-1:abc$'\"def".to_string(),
+        )]);
+        assert_eq!(exports, "export NIX_SIGNING_KEY='cache-1:abc$'\\''\"def'\n");
     }
 
     #[test]

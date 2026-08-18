@@ -468,7 +468,7 @@ pub fn fold(
 /// timeout, a lost supervisor. Without this, the surfaces stay wedged on the
 /// last in-progress render (the check run in_progress forever); with it, the
 /// check completes and the comment states what happened.
-pub fn from_run_state(run: &crate::runs::Run) -> Report {
+pub fn from_run_state(run: &crate::runs::Run, log_tail: Option<&str>) -> Report {
     use crate::support::atoms::RunState;
     let title = match run.state {
         RunState::Cancelled => "CI was cancelled".to_string(),
@@ -476,6 +476,25 @@ pub fn from_run_state(run: &crate::runs::Run) -> Report {
         RunState::Lost => "CI lost its runner before finishing".to_string(),
         _ => format!("CI ended as {} without a report", run.state),
     };
+    // The log's last message line is the run's own statement of what went
+    // wrong, which the title alone cannot carry.
+    let tasks = log_tail
+        .and_then(|tail| tail.lines().rev().find(|line| !line.trim().is_empty()))
+        .map(|line| {
+            vec![TaskView {
+                task_id: "run".to_string(),
+                label: "Run".to_string(),
+                kind: TaskKind::Validation,
+                case: "run".to_string(),
+                status: TaskStatus::Failure,
+                gate: true,
+                enabled: true,
+                headline: line.to_string(),
+                elapsed_seconds: None,
+                artifact_bytes: None,
+            }]
+        })
+        .unwrap_or_default();
     Report {
         title,
         conclusion: Some(Conclusion::Failure),
@@ -483,7 +502,7 @@ pub fn from_run_state(run: &crate::runs::Run) -> Report {
         started_at: Some(run.started_at),
         finished_at: run.finished_at,
         annotations: Vec::new(),
-        tasks: Vec::new(),
+        tasks,
         failures: std::collections::BTreeMap::new(),
         version_updates: std::collections::BTreeMap::new(),
         comparisons: Vec::new(),

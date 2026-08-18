@@ -109,6 +109,8 @@ jobs:
   build:
     needs: authorize
     if: needs.authorize.outputs.kind == 'build'
+    outputs:
+      reported: ${{ steps.report.outputs.reported }}
     runs-on: ${{ inputs.builder-runs-on }}
     timeout-minutes: 350
     permissions:
@@ -183,6 +185,7 @@ jobs:
           "$bin" run wait "$id"
 
       - name: Post report
+        id: report
         if:
           always() && steps.run.conclusion != 'skipped' && steps.run.outputs.dir
           != ''
@@ -200,6 +203,7 @@ jobs:
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --comment --reply-to "$COMMENT_ID" --check \
             --step-summary "$GITHUB_STEP_SUMMARY"
+          echo "reported=true" >> "$GITHUB_OUTPUT"
 
       - name: Share the failure detail
         if: failure()
@@ -207,6 +211,16 @@ jobs:
         with:
           name: errors-build
           path: "*-error.txt"
+          if-no-files-found: ignore
+
+      # The runner takes the run directory with it; on failure it is the
+      # only evidence of what happened inside the run.
+      - name: Share the run directory
+        if: failure() && steps.run.outputs.dir != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: failed-run
+          path: ${{ steps.run.outputs.dir }}
           if-no-files-found: ignore
 
   # No push credential here: the PR tree's own update scripts execute in
@@ -329,10 +343,12 @@ jobs:
             -f body="❌ \`/wasinix\` mutation commands only work on wasix-org/wasinix pull requests." >/dev/null
 
   # a command must never fail silently: authorization and run errors reply
-  # to the comment that asked
+  # to the comment that asked. When Post report already published the honest
+  # report, a fallback reply would only clobber it through the shared
+  # comment marker, so it stays away.
   reply-on-error:
     needs: [authorize, build, mutate, mutate-publish]
-    if: failure()
+    if: failure() && needs.build.outputs.reported != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
