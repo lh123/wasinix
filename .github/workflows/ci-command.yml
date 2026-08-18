@@ -21,5 +21,7 @@ jobs:
       contents: write
       checks: write
       pull-requests: write
+      # the timings job reads the run's own step records
+      actions: read
     uses: ./.github/workflows/ci-command-run.yml
     secrets: inherit

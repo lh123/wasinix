@@ -191,8 +191,14 @@ pub fn drive(repo: &Path, options: Options) -> Result<ChangeSet> {
     let mut moved: Vec<&Target> = Vec::new();
     for target in &targets {
         ui::fact("target", &target.name);
+        let started = std::time::Instant::now();
         let before = repo_status(repo)?;
-        match backends::run_backend(repo, target, requests.get(&target.name)) {
+        let outcome = backends::run_backend(repo, target, requests.get(&target.name));
+        ui::note(format!(
+            "  took {}",
+            crate::support::format::duration(started.elapsed().as_secs_f64())
+        ));
+        match outcome {
             Ok(outcome) => {
                 let after = repo_status(repo)?;
                 let changed = after != before;

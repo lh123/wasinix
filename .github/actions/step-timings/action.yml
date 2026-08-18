@@ -1,0 +1,31 @@
+name: Step timings
+description:
+  Append every completed job's step durations to the step summary, from the
+  run's own timing records, so a slow setup step is visible without opening any
+  job's log.
+runs:
+  using: composite
+  steps:
+    - name: Summarize step timings
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        {
+          echo "## Step timings"
+          echo
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+            --jq '
+              def dur: if . >= 60 then "\(. / 60 | floor)m \(. % 60)s" else "\(.)s" end;
+              .jobs[]
+              | select(.conclusion != null)
+              | (((.completed_at // .started_at | fromdateiso8601) - (.started_at | fromdateiso8601))) as $total
+              | "### \(.name) · \($total | dur)\n\n| step | time |\n|:--|--:|\n"
+                + ([ .steps[]
+                     | select(.started_at != null and .completed_at != null)
+                     | ((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) as $s
+                     | select($s >= 1)
+                     | "| \(.name) | \($s | dur) |"
+                   ] | join("\n"))
+                + "\n"'
+        } >> "$GITHUB_STEP_SUMMARY"

@@ -392,3 +392,20 @@ jobs:
         run: |
           gh api "repos/$GITHUB_REPOSITORY/issues/${{ github.event.issue.number }}/comments" \
             -f body="❌ \`/wasinix\` command failed before it could report; see the [Actions run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). (acting on ${{ github.event.comment.html_url }})" >/dev/null
+
+  # Which setup step was slow, per job, without opening any log.
+  timings:
+    needs: [authorize, build, mutate, mutate-publish]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          repository: wasix-org/wasinix
+
+      - name: Step timings
+        uses: ./.github/actions/step-timings
