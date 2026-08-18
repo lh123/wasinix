@@ -9,8 +9,18 @@ runs:
     - name: Remove preinstalled toolchains
       shell: bash
       run: |
-        echo "before: $(df -h --output=avail / | tail -1 | tr -d ' ') free"
-        sudo rm -rf \
+        avail_kb=$(df --output=avail / | tail -1)
+        # A roomy disk skips the sweep: the nix config's min-free/max-free
+        # already guards the tail, and deleting these trees synchronously
+        # costs minutes of inode churn.
+        if [ "$avail_kb" -gt $((80 * 1024 * 1024)) ]; then
+          echo "skipped: $(df -h --output=avail / | tail -1 | tr -d ' ') already free"
+          exit 0
+        fi
+        # mv frees each path's namespace instantly (same filesystem); the
+        # inode churn of the real deletion runs behind the build.
+        trash=$(sudo mktemp -d /trash.XXXXXX)
+        for path in \
           /usr/share/dotnet \
           /usr/local/lib/android \
           /opt/ghc \
@@ -19,9 +29,12 @@ runs:
           /usr/local/share/powershell \
           /usr/local/share/boost \
           /usr/local/lib/node_modules \
-          /opt/hostedtoolcache
-        sudo docker image prune --all --force >/dev/null 2>&1 || true
-        echo "after: $(df -h --output=avail / | tail -1 | tr -d ' ') free"
+          /opt/hostedtoolcache; do
+          if [ -e "$path" ]; then sudo mv "$path" "$trash/"; fi
+        done
+        sudo nohup rm -rf "$trash" >/dev/null 2>&1 &
+        sudo docker image prune --all --force >/dev/null 2>&1 &
+        echo "reclaiming in the background; $(df -h --output=avail / | tail -1 | tr -d ' ') free before it lands"
 
     # GitHub-hosted images carry a second, larger temp disk at /mnt; putting
     # the store there roughly triples its headroom. Depot runners have one
