@@ -468,6 +468,28 @@ pub fn fold(
 /// timeout, a lost supervisor. Without this, the surfaces stay wedged on the
 /// last in-progress render (the check run in_progress forever); with it, the
 /// check completes and the comment states what happened.
+/// The log tail of a report-less run as a fragment, so the surfaces show
+/// the run's own words where a folded report would have carried them.
+pub fn run_log_fragment(tail: &str) -> Fragment {
+    let headline = tail
+        .lines()
+        .rev()
+        .find(|line| !line.trim().is_empty())
+        .unwrap_or("the run left no log")
+        .to_string();
+    Fragment::new(
+        "run".to_string(),
+        "Run log".to_string(),
+        TaskKind::Validation,
+        TaskStatus::Failure,
+        headline,
+    )
+    .with_data(FragmentData::Log(LogExcerpt {
+        lines: tail.lines().map(str::to_string).collect(),
+        truncated: true,
+    }))
+}
+
 pub fn from_run_state(run: &crate::runs::Run, log_tail: Option<&str>) -> Report {
     use crate::support::atoms::RunState;
     let title = match run.state {

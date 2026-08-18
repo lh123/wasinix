@@ -49,6 +49,7 @@ pub struct Rendered {
 
 pub fn load(run_dir: &Path) -> Result<Rendered> {
     let report_path = crate::ci::prepare::report_path(run_dir);
+    let mut synthesized: Option<crate::ci::report::Fragment> = None;
     let report = if report_path.exists() {
         crate::support::schema::read(&report_path)?
     } else {
@@ -64,10 +65,17 @@ pub fn load(run_dir: &Path) -> Result<Rendered> {
                 run.state
             )));
         }
-        crate::ci::report::from_run_state(&run, crate::runs::log_tail(run_dir, 800).as_deref())
+        let tail = crate::runs::log_tail(run_dir, 1500);
+        if let Some(tail) = &tail {
+            synthesized = Some(crate::ci::report::run_log_fragment(tail));
+        }
+        crate::ci::report::from_run_state(&run, tail.as_deref())
     };
-    let fragments =
+    let mut fragments =
         crate::ci::report::fragments_under(&crate::ci::prepare::fragments_dir(run_dir))?;
+    if let Some(fragment) = synthesized {
+        fragments.insert(fragment.task_id.clone(), fragment);
+    }
     let snapshot = crate::ci::events::read_snapshot(run_dir).ok();
     Ok(Rendered {
         report,

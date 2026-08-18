@@ -2172,14 +2172,15 @@ mod markdown {
             finished_at: Some(1_755_003_600),
             exit_code: None,
         };
-        let report = crate::ci::report::from_run_state(
-            &run,
-            Some("copying path '/nix/store/x'\nerror: the payload died\n"),
-        );
+        let tail = "materializing: case at abc\nerror: the payload died";
+        let report = crate::ci::report::from_run_state(&run, Some(tail));
         assert_eq!(report.tasks[0].headline, "error: the payload died");
+        let fragment = crate::ci::report::run_log_fragment(tail);
+        let fragments: std::collections::BTreeMap<String, crate::ci::report::Fragment> =
+            [(fragment.task_id.clone(), fragment)].into();
         check_text(
             "comment-lost.md",
-            &comment(&report, &std::collections::BTreeMap::new(), None, &links()).into_string(),
+            &comment(&report, &fragments, None, &links()).into_string(),
         );
     }
 

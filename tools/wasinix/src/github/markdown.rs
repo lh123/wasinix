@@ -269,7 +269,7 @@ fn footer(report: &Report, fragments: &BTreeMap<String, Fragment>, links: &Links
     )
 }
 
-fn details(report: &Report) -> Markdown {
+fn details(report: &Report, fragments: &BTreeMap<String, Fragment>) -> Markdown {
     let mut body = Markdown::new();
     if let Some(request) = &report.request {
         if let Ok(echo) = serde_json::to_string_pretty(request) {
@@ -301,6 +301,25 @@ fn details(report: &Report) -> Markdown {
             Markdown::text(&took),
             Markdown::constant(" |\n"),
         ]);
+    }
+    // A failed task's log excerpt: for a normal run the step summary holds
+    // the long form, but for a report-less one this is the only story.
+    for fragment in fragments.values() {
+        if fragment.status != TaskStatus::Failure {
+            continue;
+        }
+        if let Some(FragmentData::Log(excerpt)) = &fragment.data {
+            if excerpt.lines.is_empty() {
+                continue;
+            }
+            body = Markdown::concat([
+                body,
+                Markdown::constant("\n**"),
+                Markdown::text(&fragment.label),
+                Markdown::constant("**\n\n"),
+                Markdown::fenced(&excerpt.lines.join("\n"), "text"),
+            ]);
+        }
     }
     for updates in report.version_updates.values() {
         if updates.is_empty() {
@@ -511,7 +530,7 @@ fn green(report: &Report, fragments: &BTreeMap<String, Fragment>, links: &Links)
         comparison_block(report),
         footer(report, fragments, links),
         Markdown::constant("\n"),
-        details(report),
+        details(report, fragments),
     ])
 }
 
@@ -617,7 +636,7 @@ fn failing(report: &Report, fragments: &BTreeMap<String, Fragment>, links: &Link
         comparison_block(report),
         footer(report, fragments, links),
         Markdown::constant("\n"),
-        details(report),
+        details(report, fragments),
     ])
 }
 

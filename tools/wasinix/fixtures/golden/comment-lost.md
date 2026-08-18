@@ -12,4 +12,11 @@
 |:--|:--:|:--|--:|
 | Run | ❌ | error: the payload died |  |
 
+**Run log**
+
+```text
+materializing: case at abc
+error: the payload died
+```
+
 </details>
