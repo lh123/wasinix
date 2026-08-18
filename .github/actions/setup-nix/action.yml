@@ -37,9 +37,13 @@ runs:
         key: nix-flake-inputs-v3-${{ hashFiles('flake.lock') }}
         restore-keys: nix-flake-inputs-v3-
 
-    - name: Cache the wasinix binary closure
+    # Restore/save split instead of the post-step: the post only saves on
+    # job success, so a failed authorize (an invalid command) would discard
+    # the closure it just built and every later job would compile again.
+    - name: Restore the wasinix binary closure
       if: inputs.wasinix-binary == 'true'
-      uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+      id: bin-cache
+      uses: actions/cache/restore@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
       with:
         # A file:// binary cache holding only the wasinix closure: an
         # actions-cache hit imports it at runner-local speed, beating both
@@ -63,3 +67,14 @@ runs:
         nix build .#wasinix --no-link
         nix copy --to "$store" .#wasinix \
           || echo "closure cache save failed; the next run builds again"
+
+    - name: Save the wasinix binary closure
+      if:
+        inputs.wasinix-binary == 'true' && steps.bin-cache.outputs.cache-hit !=
+        'true'
+      uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+      with:
+        path: ~/.cache/wasinix-bin
+        key:
+          wasinix-bin-v1-${{ hashFiles('tools/wasinix/**', 'flake.nix',
+          'flake.lock') }}
