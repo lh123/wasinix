@@ -722,13 +722,19 @@ fn run_command(command: RunCommand) -> Result<CommandStatus> {
             ui::emit(&json, &report, |report| {
                 ui::result(&report.title);
                 for task in &report.tasks {
-                    if matches!(
-                        task.status,
-                        crate::support::atoms::TaskStatus::Failure
-                            | crate::support::atoms::TaskStatus::Cancelled
-                    ) {
-                        ui::result(format!("  {}: {}", task.task_id, task.headline));
+                    if !task.enabled {
+                        continue;
                     }
+                    let took = task
+                        .elapsed_seconds
+                        .map(|elapsed| format!(" · took {elapsed}"))
+                        .unwrap_or_default();
+                    ui::result(format!(
+                        "  {} {}: {}{took}",
+                        render::glyph(task.status),
+                        task.task_id,
+                        task.headline
+                    ));
                 }
             })?;
             Ok(CommandStatus::SUCCESS)

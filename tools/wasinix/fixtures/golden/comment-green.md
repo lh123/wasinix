@@ -27,11 +27,11 @@
 
 **Pipeline**
 
-| task | status | result |
-|:--|:--:|:--|
-| case: Formatting | ✅ | ok |
-| case: Evaluation inputs | ✅ | ok |
-| case: Evaluation | ✅ | ok |
-| case: Core | ✅ | ok |
+| task | status | result | time |
+|:--|:--:|:--|--:|
+| case: Formatting | ✅ | ok | 12s |
+| case: Evaluation inputs | ✅ | ok | 12s |
+| case: Evaluation | ✅ | ok | 12s |
+| case: Core | ✅ | ok | 12s |
 
 </details>

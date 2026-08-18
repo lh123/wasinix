@@ -26,9 +26,12 @@ pub struct LineRenderer {
     failed: usize,
     /// Start order, so the named few are the longest-running builds.
     building: Vec<String>,
+    /// PhaseStarted stamps by task id, so the finish line can say how long
+    /// the task took.
+    phase_started: std::collections::BTreeMap<String, u64>,
 }
 
-fn glyph(status: TaskStatus) -> &'static str {
+pub(crate) fn glyph(status: TaskStatus) -> &'static str {
     match status {
         TaskStatus::Success => "✓",
         TaskStatus::Failure | TaskStatus::Cancelled => "✗",
@@ -62,6 +65,7 @@ impl LineRenderer {
             completed: 0,
             failed: 0,
             building: Vec::new(),
+            phase_started: std::collections::BTreeMap::new(),
         }
     }
 
@@ -132,8 +136,14 @@ impl LineRenderer {
                 }
                 Vec::new()
             }
-            Event::PhaseStarted { at, label, jobs, .. } => {
+            Event::PhaseStarted {
+                at,
+                label,
+                jobs,
+                task_id,
+            } => {
                 self.total_jobs += jobs.unwrap_or(0);
+                self.phase_started.insert(task_id.clone(), *at);
                 let size = jobs
                     .map(|jobs| format!(" · {jobs} jobs"))
                     .unwrap_or_default();
@@ -145,8 +155,15 @@ impl LineRenderer {
                 headline,
                 task_id,
             } => {
+                let took = self
+                    .phase_started
+                    .remove(task_id)
+                    .map(|started| {
+                        format!(" · took {}", format::duration(at.saturating_sub(started) as f64))
+                    })
+                    .unwrap_or_default();
                 vec![format!(
-                    "{} {} {task_id} · {headline}",
+                    "{} {} {task_id} · {headline}{took}",
                     self.stamp(*at),
                     glyph(*status)
                 )]

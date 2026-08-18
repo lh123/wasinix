@@ -267,9 +267,13 @@ fn details(report: &Report) -> Markdown {
         }
     }
     body = body.push(Markdown::constant(
-        "**Pipeline**\n\n| task | status | result |\n|:--|:--:|:--|\n",
+        "**Pipeline**\n\n| task | status | result | time |\n|:--|:--:|:--|--:|\n",
     ));
     for task in &report.tasks {
+        let took = task
+            .elapsed_seconds
+            .map(|elapsed| elapsed.to_string())
+            .unwrap_or_default();
         body = Markdown::concat([
             body,
             Markdown::constant("| "),
@@ -278,6 +282,8 @@ fn details(report: &Report) -> Markdown {
             glyph(task.status),
             Markdown::constant(" | "),
             headline_cell(&task.headline),
+            Markdown::constant(" | "),
+            Markdown::text(&took),
             Markdown::constant(" |\n"),
         ]);
     }

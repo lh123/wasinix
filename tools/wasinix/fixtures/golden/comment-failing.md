@@ -33,11 +33,11 @@
 
 **Pipeline**
 
-| task | status | result |
-|:--|:--:|:--|
-| case: Formatting | ✅ | ok |
-| case: Evaluation inputs | ✅ | ok |
-| case: Evaluation | ✅ | ok |
-| case: Core | ❌ | 1 failed · 39 built |
+| task | status | result | time |
+|:--|:--:|:--|--:|
+| case: Formatting | ✅ | ok | 12s |
+| case: Evaluation inputs | ✅ | ok | 12s |
+| case: Evaluation | ✅ | ok | 12s |
+| case: Core | ❌ | 1 failed · 39 built |  |
 
 </details>

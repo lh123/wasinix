@@ -81,15 +81,15 @@
 
 **Pipeline**
 
-| task | status | result |
-|:--|:--:|:--|
-| candidate-1: Formatting | ✅ | ok |
-| baseline: Evaluation inputs | ✅ | ok |
-| baseline: Evaluation | ✅ | ok |
-| candidate-1: Evaluation inputs | ✅ | ok |
-| candidate-1: Evaluation | ✅ | ok |
-| baseline: Core | ✅ | ok |
-| candidate-1: Core | ✅ | ok |
+| task | status | result | time |
+|:--|:--:|:--|--:|
+| candidate-1: Formatting | ✅ | ok | 12s |
+| baseline: Evaluation inputs | ✅ | ok | 12s |
+| baseline: Evaluation | ✅ | ok | 12s |
+| candidate-1: Evaluation inputs | ✅ | ok | 12s |
+| candidate-1: Evaluation | ✅ | ok | 12s |
+| baseline: Core | ✅ | ok | 12s |
+| candidate-1: Core | ✅ | ok | 12s |
 
 **Downstream version changes (1)**
 

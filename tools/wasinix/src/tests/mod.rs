@@ -2507,7 +2507,7 @@ mod render {
                 "[+0s] case: Core · 40 jobs",
                 "[+1m 30s] ✗ case::checks.zlib",
                 "  │ builder failed with exit code 1",
-                "[+2m 30s] ✗ case.core · 1 of 40 jobs failed",
+                "[+2m 30s] ✗ case.core · 1 of 40 jobs failed · took 2m 30s",
                 "[+2m 30s] failed · 1/40 jobs · 1 failed",
             ]
         );

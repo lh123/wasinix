@@ -8,8 +8,8 @@
 
 **Pipeline**
 
-| task | status | result |
-|:--|:--:|:--|
-| Run | ❌ | error: the payload died |
+| task | status | result | time |
+|:--|:--:|:--|--:|
+| Run | ❌ | error: the payload died |  |
 
 </details>
