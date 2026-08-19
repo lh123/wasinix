@@ -1,0 +1,232 @@
+name: Build Sandbox
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Python component to build
+        required: true
+        default: python313
+        type: choice
+        options:
+          - python313
+          - python314
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.package || 'python313' }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build sandbox (${{ inputs.package || 'python313' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      PYTHON_PACKAGE: ${{ inputs.package || 'python313' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free runner disk
+        uses: ./.github/actions/free-disk
+
+      - name: Set up Nix
+        uses: ./.github/actions/setup-nix
+
+      - name: Restore Nix binary cache
+        id: nix-binary-cache
+        uses: actions/cache/restore@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: /tmp/nix-binary-cache
+          key:
+            nix-sandbox-v1-${{ runner.os }}-${{ env.PYTHON_PACKAGE }}-${{
+            hashFiles('flake.lock', 'flake.nix', 'pkgs/**') }}-${{
+            github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            nix-sandbox-v1-${{ runner.os }}-${{ env.PYTHON_PACKAGE }}-${{ hashFiles('flake.lock', 'flake.nix', 'pkgs/**') }}-
+            nix-sandbox-v1-${{ runner.os }}-${{ env.PYTHON_PACKAGE }}-
+            nix-python-v2-${{ runner.os }}-${{ env.PYTHON_PACKAGE }}-${{ hashFiles('flake.lock', 'flake.nix', 'pkgs/**') }}-
+            nix-python-v2-${{ runner.os }}-${{ env.PYTHON_PACKAGE }}-
+            nix-python-v1-${{ runner.os }}-${{ env.PYTHON_PACKAGE }}-
+            nix-python-v1-${{ runner.os }}-
+
+      - name: Import Nix binary cache
+        if: steps.nix-binary-cache.outputs.cache-matched-key != ''
+        continue-on-error: true
+        run: nix copy --all --no-check-sigs --from 'file:///tmp/nix-binary-cache'
+
+      - name: Start tmate session
+        uses: mxschmitt/action-tmate@35b54afac29c97fb54faba5b513f8fbd1882f113 # v3
+        with:
+          detached: true
+          limit-access-to-actor: true
+
+      - name: Resolve sandbox derivations
+        id: sandbox-build
+        shell: bash
+        run: |
+          printf '%s\n' \
+            bash \
+            coreutils \
+            curl \
+            find \
+            grep \
+            jq \
+            "$PYTHON_PACKAGE" \
+            sed > sandbox-webc-components
+          printf '%s\n' \
+            annotated-types \
+            chardet \
+            defusedxml \
+            dill \
+            et-xmlfile \
+            lxml \
+            numpy \
+            odfpy \
+            openpyxl \
+            pandas \
+            pip \
+            puremagic \
+            pydantic \
+            pydantic-core \
+            pypdf \
+            python-dateutil \
+            python-docx \
+            pytz \
+            pyxlsb \
+            six \
+            typing-extensions \
+            typing-inspection \
+            tzdata \
+            xlrd > sandbox-python-wheels
+          printf '%s\n' "${PYTHON_PACKAGE/python/py}" > sandbox-python-wheel-set
+
+          nix path-info --derivation \
+            ".#toolchain.wasixcc" > sandbox-build-drvs
+          while IFS= read -r component; do
+            nix path-info --derivation \
+              ".#wasmerPackages.$component.webc" >> sandbox-build-drvs
+          done < sandbox-webc-components
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build WASIX toolchain
+        run: nix build -L ".#toolchain.wasixcc" -o result-toolchain
+
+      - name: Package WASIX toolchain
+        shell: bash
+        run: |
+          mkdir -p toolchain-artifact/cache
+          toolchain_root=$(readlink -f result-toolchain)
+          nix copy \
+            --to "file://$PWD/toolchain-artifact/cache?compression=zstd" \
+            "$toolchain_root"
+          printf '%s\n' "$toolchain_root" > toolchain-artifact/toolchain-root.txt
+          cat > toolchain-artifact/README.md <<'EOF'
+          Import the toolchain closure into a local Nix store:
+
+              nix copy --no-check-sigs --from "file://$PWD/cache" "$(cat toolchain-root.txt)"
+
+          `toolchain-root.txt` is the imported WASIXCC package root.
+          EOF
+
+      - name: Upload WASIX toolchain
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sandbox-toolchain-${{ runner.os }}
+          path: toolchain-artifact
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Build sandbox component WEBCs
+        shell: bash
+        run: |
+          mkdir -p artifact
+          while IFS= read -r component; do
+            result="result-$component"
+            destination="artifact/$component"
+            nix build -L ".#wasmerPackages.$component.webc" -o "$result"
+            mkdir -p "$destination"
+            find -L "$result" -type f -name '*.webc' -exec cp {} "$destination/" \;
+            test -n "$(find "$destination" -type f -name '*.webc' -print -quit)"
+          done < sandbox-webc-components
+
+      - name: Upload sandbox component WEBCs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sandbox-components-${{ env.PYTHON_PACKAGE }}
+          path: artifact/**/*.webc
+          if-no-files-found: error
+
+      - name: Resolve sandbox Python wheel derivations
+        shell: bash
+        run: |
+          wheel_set=$(cat sandbox-python-wheel-set)
+          while IFS= read -r wheel; do
+            nix path-info --derivation \
+              ".#pythonWheels.$wheel_set.\"$wheel\".dist" >> sandbox-build-drvs
+          done < sandbox-python-wheels
+
+      - name: Build sandbox Python wheels
+        shell: bash
+        run: |
+          wheel_set=$(cat sandbox-python-wheel-set)
+          mkdir -p python-wheel-artifact
+          while IFS= read -r wheel; do
+            result="result-wheel-$wheel"
+            nix build -L \
+              ".#pythonWheels.$wheel_set.\"$wheel\".dist" \
+              -o "$result"
+            find -L "$result" -type f -name '*.whl' \
+              -exec cp {} python-wheel-artifact/ \;
+          done < sandbox-python-wheels
+          test -n "$(find python-wheel-artifact -type f -name '*.whl' -print -quit)"
+
+      - name: Upload sandbox Python wheels
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sandbox-python-wheels-${{ env.PYTHON_PACKAGE }}
+          path: python-wheel-artifact/*.whl
+          if-no-files-found: error
+
+      - name: Export Nix binary cache
+        id: export-nix-binary-cache
+        if: always() && steps.nix-binary-cache.outputs.cache-hit != 'true' && steps.sandbox-build.outputs.ready == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          rm -rf /tmp/nix-binary-cache
+          closure=$(mktemp)
+          candidates=$(mktemp)
+          valid=$(mktemp)
+
+          while IFS= read -r drv; do
+            nix-store --query --requisites "$drv"
+          done < sandbox-build-drvs | sort -u > "$closure"
+          while IFS= read -r path; do
+            case "$path" in
+              *.drv) nix-store --query --outputs "$path" ;;
+              *) echo "$path" ;;
+            esac
+          done < "$closure" | sort -u > "$candidates"
+          nix path-info --all | sort -u > "$valid"
+          mapfile -t paths < <(comm -12 "$candidates" "$valid")
+          if [ "${#paths[@]}" -eq 0 ]; then
+            echo "No completed paths to cache"
+            exit 0
+          fi
+
+          nix copy --to 'file:///tmp/nix-binary-cache?compression=zstd' "${paths[@]}"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Save Nix binary cache
+        if: always() && steps.nix-binary-cache.outputs.cache-hit != 'true' && steps.export-nix-binary-cache.outputs.ready == 'true'
+        uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: /tmp/nix-binary-cache
+          key: ${{ steps.nix-binary-cache.outputs.cache-primary-key }}
