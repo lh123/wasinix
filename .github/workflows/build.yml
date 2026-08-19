@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.repository == 'wasix-org/wasinix'
     name: Build all packages
     runs-on: depot-ubuntu-24.04-16
     # high ceiling for a cold cache; warm runs finish in minutes (max is 360)

@@ -1,0 +1,60 @@
+name: Build Python WEBC
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Python package to build
+        required: true
+        default: python313
+        type: choice
+        options:
+          - python313
+          - python314
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.package || 'python313' }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ inputs.package || 'python313' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      PYTHON_PACKAGE: ${{ inputs.package || 'python313' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free runner disk
+        uses: ./.github/actions/free-disk
+
+      - name: Set up Nix
+        uses: ./.github/actions/setup-nix
+
+      - name: Build Python WEBC
+        run: nix build ".#wasmerPackages.$PYTHON_PACKAGE.webc" -o result-python
+
+      - name: Verify Python
+        run: nix run ".#wasmerPackages.$PYTHON_PACKAGE.webc.shim" -- --version
+
+      - name: Collect WEBC
+        shell: bash
+        run: |
+          mkdir -p artifact
+          find -L result-python -type f -name '*.webc' -exec cp {} artifact/ \;
+          test -n "$(find artifact -maxdepth 1 -type f -name '*.webc' -print -quit)"
+
+      - name: Upload Python WEBC
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.PYTHON_PACKAGE }}-webc
+          path: artifact/*.webc
+          if-no-files-found: error

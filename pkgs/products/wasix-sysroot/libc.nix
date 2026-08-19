@@ -20,12 +20,12 @@
   pic ? false,
   exnref ? false,
 }: let
-  version = "2026-07-30.1";
+  version = "2026-08-19.1";
   src = fetchFromGitHub {
-    owner = "wasix-org";
+    owner = "lh123";
     repo = "wasix-libc";
-    tag = "v${version}";
-    hash = "sha256-UGBHCYuUlNE6fAAUJnPxIgfJ7ujiUKGUrWU+BFKQfsQ=";
+    rev = "8c0a6e68dd930685737a8f7eeda2d515bb9a181e";
+    hash = "sha256-G+bWso7DyP3xrLRcn3hiQ5zmIuNpuscniWJTrvdQxPo=";
   };
 
   updateWrapper = buildPackages.writeShellApplication {
@@ -98,7 +98,7 @@ in
       accepts = ["release" "revision"];
       source = {
         kind = "github";
-        owner = "wasix-org";
+        owner = "lh123";
         repo = "wasix-libc";
       };
     };
@@ -118,17 +118,13 @@ in
     ];
 
     # select()/pselect() bail with ENOSYS when exceptfds is non-empty, spinning
-    # defensive callers. tzname, inet-addr and sched unhide declarations sitting
-    # behind __wasilibc_unmodified_upstream while the symbols themselves link, so a
-    # consumer naming one gets "undeclared identifier"; inet-addr also adds musl's
-    # inet_addr.c, missing from the Makefile source list. fcntl-locking exposes the
-    # record-lock API but returns ENOSYS until Wasmer provides shared lock state.
-    # xsi-signal is the same unhiding for the XSI signal calls (siginterrupt and
-    # friends), which are built on sigaction.
+    # defensive callers. sched unhides declarations sitting behind
+    # __wasilibc_unmodified_upstream while the symbols themselves link.
+    # fcntl-locking exposes the record-lock API but returns ENOSYS until Wasmer
+    # provides shared lock state. xsi-signal is the same unhiding for the XSI
+    # signal calls (siginterrupt and friends), which are built on sigaction.
     patches = [
       ./libc-select-exceptfds.patch
-      ./wasix-libc-tzname.patch
-      ./wasix-libc-inet-addr.patch
       ./wasix-libc-sched.patch
       ./wasix-libc-fcntl-locking.patch
       ./wasix-libc-xsi-signal.patch
