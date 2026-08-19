@@ -14,6 +14,11 @@ on:
         options:
           - python313
           - python314
+      debug:
+        description: Start a tmate session for the triggering actor
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -39,6 +44,30 @@ jobs:
       - name: Set up Nix
         uses: ./.github/actions/setup-nix
 
+      - name: Restore Nix binary cache
+        id: nix-binary-cache
+        uses: actions/cache/restore@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: /tmp/nix-binary-cache
+          key:
+            nix-python-v1-${{ runner.os }}-${{ env.PYTHON_PACKAGE }}-${{
+            hashFiles('flake.lock', 'flake.nix', 'pkgs/**') }}
+          restore-keys: |
+            nix-python-v1-${{ runner.os }}-${{ env.PYTHON_PACKAGE }}-
+            nix-python-v1-${{ runner.os }}-
+
+      - name: Import Nix binary cache
+        if: steps.nix-binary-cache.outputs.cache-matched-key != ''
+        continue-on-error: true
+        run: nix copy --all --no-check-sigs --from 'file:///tmp/nix-binary-cache'
+
+      - name: Start tmate session
+        if: github.event_name == 'workflow_dispatch' && inputs.debug
+        uses: mxschmitt/action-tmate@35b54afac29c97fb54faba5b513f8fbd1882f113 # v3
+        with:
+          detached: true
+          limit-access-to-actor: true
+
       - name: Build Python WEBC
         run: nix build ".#wasmerPackages.$PYTHON_PACKAGE.webc" -o result-python
 
@@ -51,6 +80,22 @@ jobs:
           mkdir -p artifact
           find -L result-python -type f -name '*.webc' -exec cp {} artifact/ \;
           test -n "$(find artifact -maxdepth 1 -type f -name '*.webc' -print -quit)"
+
+      - name: Export Nix binary cache
+        if: steps.nix-binary-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          rm -rf /tmp/nix-binary-cache
+          nix copy --to 'file:///tmp/nix-binary-cache?compression=zstd' \
+            .#toolchain.wasixcc \
+            ".#wasmerPackages.$PYTHON_PACKAGE.webc"
+
+      - name: Save Nix binary cache
+        if: steps.nix-binary-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: /tmp/nix-binary-cache
+          key: ${{ steps.nix-binary-cache.outputs.cache-primary-key }}
 
       - name: Upload Python WEBC
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
