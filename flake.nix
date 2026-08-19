@@ -93,7 +93,7 @@
     lib = wasix.pkgs.lib;
     wasixLib = import ./pkgs/lib {inherit lib;};
 
-    # From-source toolchain (LLVM fork + libc + runtimes + sysroot), see pkgs/toolchain.
+    # WASIX toolchain (LLVM release tools + libc + runtimes + sysroot), see pkgs/toolchain.
     toolchain = wasix.toolchain;
 
     treefmtEval = treefmt-nix.lib.evalModule wasix.pkgs {

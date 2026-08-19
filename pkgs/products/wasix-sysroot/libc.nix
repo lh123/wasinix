@@ -1,5 +1,5 @@
-# One ABI variant of the wasix libc, built from source. It needs *a* clang, not the
-# fork LLVM, since the Makefile supplies the ABI flags itself.
+# One ABI variant of the wasix libc, built from source with the WASIX LLVM
+# release tools.
 {
   lib,
   stdenv,
@@ -8,7 +8,7 @@
   rustPlatform,
   nix-update-script,
   writeText,
-  llvmPackages_21,
+  wasix-llvm,
   gnumake,
   rsync,
   python3,
@@ -105,9 +105,7 @@ in
 
     nativeBuildInputs = [
       # Unwrapped: wasix-libc drives the target itself.
-      llvmPackages_21.clang-unwrapped
-      llvmPackages_21.llvm
-      llvmPackages_21.lld
+      wasix-llvm
       gnumake
       rsync
       python3

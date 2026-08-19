@@ -63,10 +63,10 @@ in
     };
 
     meta = {
-      description = "WASIX C/C++ compiler driver (clang/lld/binaryen orchestrator), wrapped with the from-source toolchain";
+      description = "WASIX C/C++ compiler driver (clang/lld/binaryen orchestrator)";
       homepage = "https://github.com/wasix-org/wasixcc";
       license = with lib.licenses; [mit asl20];
-      # The wrapped toolchain (LLVM fork, sysroot) is only built for x86_64-linux.
+      # The wrapped toolchain (LLVM release, sysroot) is only built for x86_64-linux.
       platforms = ["x86_64-linux"];
       mainProgram = "wasixcc";
     };

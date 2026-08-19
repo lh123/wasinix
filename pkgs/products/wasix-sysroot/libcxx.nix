@@ -8,9 +8,8 @@
   cmake,
   ninja,
   python3,
-  # the fork LLVM; its .llvm.monorepoSrc is the tree we build the runtimes from
-  # (the same one the toolchain came from).
-  llvm,
+  monorepoSrc,
+  llvmTools,
   version,
   # per-variant wasix-libc cmake toolchain file (selected in default.nix).
   toolchainFile,
@@ -33,15 +32,13 @@ in
 
     pname = "wasix-libcxx-${name}";
     inherit version;
-    src = llvm.llvm.monorepoSrc;
+    src = monorepoSrc;
 
     nativeBuildInputs = [
       cmake
       ninja
       python3
-      llvm.clang-unwrapped
-      llvm.lld
-      llvm.llvm
+      llvmTools
     ];
 
     cmakeDir = "../runtimes";

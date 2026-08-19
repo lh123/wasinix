@@ -12,7 +12,7 @@
   cmake,
   ninja,
   writeText,
-  llvm,
+  llvmTools,
   name,
   eh,
   pic,
@@ -42,7 +42,7 @@ in
     dontUnpack = true;
     # We drive cmake by hand, so skip the hook's configure.
     dontUseCmakeConfigure = true;
-    nativeBuildInputs = [cmake ninja llvm.clang-unwrapped llvm.lld llvm.llvm];
+    nativeBuildInputs = [cmake ninja llvmTools];
 
     buildPhase = ''
       runHook preBuild

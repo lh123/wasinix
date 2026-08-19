@@ -1,5 +1,5 @@
-# The wasix toolchain, built from source: LLVM fork, per-variant sysroot, and the
-# wrappers driving them. `haskell` is a separate wasi toolchain; see haskell/.
+# The wasix toolchain: LLVM release tools, per-variant sysroots, and the wrappers
+# driving them. `haskell` is a separate wasi toolchain; see haskell/.
 {
   pkgs,
   ghcWasm,

@@ -34,7 +34,7 @@
   xz,
   which,
   file,
-  # From-source wasix LLVM (clang/lld) + the EH and EH+PIC libc sysroots.
+  # WASIX LLVM release tools plus the EH and EH+PIC libc sysroots.
   pkgs,
   wasix-llvm,
   wasixcc,
