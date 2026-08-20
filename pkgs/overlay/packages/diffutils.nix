@@ -5,6 +5,7 @@
 }:
 helpers.libTweaks {
   passthru.wasix.shipped = true;
+  passthru.wasix.supportedProfiles = ["off"];
   passthru.wasmer.entrypoint = "diff";
   passthru.wasmer.commands = [
     {
