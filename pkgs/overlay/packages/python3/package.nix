@@ -17,9 +17,40 @@
 
     mkWasixPython = base: let
       pyVer = base.pythonVersion;
+      runtime =
+        final.runCommand "python${pyVer}-wasmer-runtime" {
+          nativeBuildInputs = with final.buildPackages; [findutils gnused];
+        } ''
+          mkdir -p "$out/bin" "$out/lib" "$out/share"
+          install -m755 ${py}/bin/python${pyVer}.wasm "$out/bin/python${pyVer}.wasm"
+          cp -R --no-preserve=mode,ownership \
+            ${py}/lib/python${pyVer} "$out/lib/python${pyVer}"
+          cp -R --no-preserve=mode,ownership \
+            ${final.ncurses}/share/terminfo "$out/share/terminfo"
+          chmod -R u+w "$out"
+
+          # Match the official runtime package: source modules are sufficient,
+          # while build bytecode and the static archive only inflate the WebC.
+          find "$out/lib/python${pyVer}" -type d -name __pycache__ \
+            -prune -exec rm -rf {} +
+          find "$out/lib/python${pyVer}" -type f -name 'libpython*.a' -delete
+
+          # The Nix package remains the cross-build SDK. Its runtime copy uses
+          # stable paths so sysconfig agrees with sys.prefix inside the guest.
+          while IFS= read -r -d $'\0' file; do
+            sed -i \
+              -e 's#${py}#/usr/local#g' \
+              -e 's#${final.buildPackages.tzdata}#/usr#g' \
+              -e 's#/nix/store/[a-z0-9]\{32\}-mailcap[^" ]*/etc/mime\.types#/etc/mime.types#g' \
+              "$file"
+          done < <(find "$out/lib/python${pyVer}" -type f \
+            \( -name '*.py' -o -name '*.json' -o -name Makefile \) -print0)
+        '';
       py =
         helpers.libTweaks {
           configureFlags = [
+            "--prefix=/usr/local"
+            "--exec-prefix=/usr/local"
             "--enable-wasm-dynamic-linking"
             # nixpkgs presets ac_cv_x87_double_rounding=yes for every cross build, an
             # x86-only assumption; at "yes" pycore_pymath.h drops Python/dtoa.c and
@@ -147,6 +178,17 @@
             export NIX_LDFLAGS="''${NIX_LDFLAGS:-} $PWD/wasix_pty_stubs.o"
           '';
 
+          installPhase = _old: ''
+            runHook preInstall
+
+            install_root="$TMPDIR/python-install"
+            mkdir -p "$install_root" "$out"
+            make install DESTDIR="$install_root"
+            cp -a "$install_root/usr/local/." "$out/"
+
+            runHook postInstall
+          '';
+
           # The libatomic probe (gh-109054) puts -latomic into LIBS; wasix has no such
           # archive. The installed sysconfig carries it too, scrubbed in postInstall.
           postConfigure = ''
@@ -159,7 +201,7 @@
           # ac_sys_system stays WASI. Setup.local forces the modules configure marks n/a.
           postPatch = ''
                     substituteInPlace Lib/subprocess.py \
-                      --replace-fail '${final.buildPackages.bashNonInteractive}/bin/sh' '${preferredProfilePackages.bash}/bin/sh'
+                      --replace-fail '${final.buildPackages.bashNonInteractive}/bin/sh' '/bin/sh'
 
                     substituteInPlace configure.ac \
                       --replace-fail ' -lwasi-emulated-signal -lwasi-emulated-getpid -lwasi-emulated-process-clocks' \
@@ -223,9 +265,12 @@
             for f in \
               "$out"/lib/pkgconfig/python-*.pc \
               "$out"/lib/python${pyVer}/_sysconfigdata*.py \
+              "$out"/lib/python${pyVer}/build-details.json \
               "$out"/lib/python${pyVer}/config-*/Makefile \
               "$out"/bin/python${pyVer}-config; do
-              [ -e "$f" ] && sed -i 's/-latomic//g' "$f"
+              if [ -e "$f" ]; then
+                sed -i -e "s#/usr/local#$out#g" -e 's/-latomic//g' "$f"
+              fi
             done
 
             if [ -e "$out/lib/python${pyVer}/build-details.json" ]; then
@@ -242,6 +287,7 @@
           '';
 
           dontCheckForBrokenSymlinks = true;
+          dontAddPrefix = true;
 
           # dev-tool shebangs point at the build-platform bash; it never runs under wasmer.
           disallowedReferences = drf:
@@ -285,18 +331,23 @@
                   env = {
                     SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
                     SSL_CERT_DIR = "/etc/ssl/certs";
+                    PYTHONTZPATH = "/usr/share/zoneinfo";
+                    TERMINFO_DIRS = "/usr/local/share/terminfo";
                     # getpath can't resolve argv0 (no PATH in the guest), leaving sys.executable
                     # empty, which breaks subprocess([sys.executable, ..]) and spawn.
-                    PYTHONEXECUTABLE = "${py}/bin/python${pyVer}.wasm";
+                    PYTHONEXECUTABLE = "/usr/local/bin/python${pyVer}.wasm";
                   };
                 }
               ];
-              autoSelfMount = true;
-              # autoSelfMount only scans bin/*.wasm, but bash is baked into subprocess.py and
-              # tzdata into _sysconfigdata (else zoneinfo raises "No time zone found").
-              selfMounts = [preferredProfilePackages.bash final.buildPackages.tzdata];
-              # Without a bundled CA set, https raises SSLCertVerificationError.
-              fs."/etc/ssl" = "${final.cacert}/etc/ssl";
+              dependencies = [preferredProfilePackages.bash];
+              fs = {
+                # Keep Nix paths on the build side. The packaged runtime follows
+                # CPython's conventional layout and never exposes its store hash.
+                "/usr/local" = runtime;
+                "/usr/share/zoneinfo" = "${final.buildPackages.tzdata}/share/zoneinfo";
+                # Without a bundled CA set, https raises SSLCertVerificationError.
+                "/etc/ssl" = "${final.cacert}/etc/ssl";
+              };
             };
           };
         } (base.override {

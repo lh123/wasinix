@@ -6,7 +6,8 @@
   cmake,
   ninja,
   python3,
-  llvm,
+  monorepoSrc,
+  llvmTools,
   flang,
   version,
   toolchainFile,
@@ -22,15 +23,13 @@ in
 
     pname = "wasix-flang-rt-${name}";
     inherit version;
-    src = llvm.llvm.monorepoSrc;
+    src = monorepoSrc;
 
     nativeBuildInputs = [
       cmake
       ninja
       python3
-      llvm.clang-unwrapped
-      llvm.lld
-      llvm.llvm
+      llvmTools
       flang
     ];
 

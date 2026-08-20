@@ -1,6 +1,6 @@
-# The wasix-org LLVM fork (clang/lld/llvm), built via nixpkgs' llvmPackages with
-# the fork source swapped in. Built once on the host x86_64; it is both the
-# shipped toolchain and the compiler that builds the sysroot runtimes.
+# Host clang/lld/llvm tools from the wasix-org LLVM release. The source package
+# scope remains available through passthru for products that need LLVM libraries
+# or tools absent from the release archive.
 {
   pkgs,
   nix-update-script,
@@ -22,6 +22,13 @@
     if baseOf version == version
     then throw "llvm fork release '${version}' does not look like <major>.<minor>.<base-patch>NN; derive the base by hand"
     else baseOf version;
+  updateWrapper = pkgs.writeShellApplication {
+    name = "wasix-llvm-update";
+    runtimeInputs = with pkgs; [git jq nix gnused];
+    text = ''
+      exec bash "$(git rev-parse --show-toplevel)/pkgs/products/wasix-llvm/update.sh" "$@"
+    '';
+  };
   # nixpkgs ships one llvmPackages (and patch set) per major, so the scope
   # follows the fork's major; a bump nixpkgs has no scope for fails eval.
   llvmPackages = pkgs."llvmPackages_${pkgs.lib.versions.major version}";
@@ -30,6 +37,10 @@
     repo = "llvm-project";
     tag = version;
     hash = "sha256-TKvDtvvCi1mOhYvbb7kHK7cWezZp/XyaydZY1ZJQR4g=";
+  };
+  bindist = pkgs.fetchurl {
+    url = "https://github.com/wasix-org/llvm-project/releases/download/${version}/LLVM-Linux-x86_64.tar.gz";
+    hash = "sha256-QGa1KBbDOC0QxafXz9YlKl9DJFnwB8FD8H4jvzZ8Q+o=";
   };
 
   # The stock compiler-rt/libcxx are invalid for wasix and the replacements are
@@ -87,15 +98,17 @@
               updateScript = {
                 name = "llvm"; # attr tail is `clang`
                 # the fork also carries non-release tags (wasixrel-*, llvmorg-*)
-                command = nix-update-script {
-                  extraArgs = [
-                    "--flake"
-                    "--version-regex"
-                    "^([0-9.]+)$"
-                  ];
-                };
+                command =
+                  ["${updateWrapper}/bin/wasix-llvm-update"]
+                  ++ nix-update-script {
+                    extraArgs = [
+                      "--flake"
+                      "--version-regex"
+                      "^([0-9.]+)$"
+                    ];
+                  };
                 attrPath = "toolchain.llvm.clang.pin";
-                accepts = ["release" "revision"];
+                accepts = ["release"];
                 source = {
                   kind = "github";
                   owner = "wasix-org";
@@ -114,15 +127,28 @@
       }
     );
 
-  # Single LLVM install tree (clang, wasm-ld, llvm-*, clang's resource dir) for
-  # consumers that need one location, notably wasixcc's WASIXCC_LLVM_LOCATION.
-  llvmTree = pkgs.symlinkJoin {
-    name = "wasix-llvm-${version}";
-    paths = [
-      llvm.clang-unwrapped
-      llvm.lld
-      llvm.llvm
-    ];
+  llvmTree = pkgs.stdenvNoCC.mkDerivation {
+    pname = "wasix-llvm";
+    inherit version;
+    src = bindist;
+    sourceRoot = ".";
+    dontConfigure = true;
+    dontBuild = true;
+    dontStrip = true;
+
+    installPhase = ''
+      runHook preInstall
+      mkdir -p "$out"
+      cp -r bin lib "$out/"
+      runHook postInstall
+    '';
+
+    meta = {
+      description = "WASIX LLVM host tools";
+      homepage = "https://github.com/wasix-org/llvm-project";
+      license = pkgs.lib.licenses.asl20;
+      platforms = ["x86_64-linux"];
+    };
   };
 in
   # One derivation so the products loader can carry it; the pieces the toolchain

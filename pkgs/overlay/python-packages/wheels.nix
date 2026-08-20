@@ -58,6 +58,7 @@
   {attr = "aioresponses";}
   {attr = "bytecode";}
   {attr = "pydantic";}
+  {attr = "pip";}
   {
     attr = "pyopenssl";
     pyImport = "OpenSSL";
@@ -69,6 +70,20 @@
   {attr = "greenback";}
   {attr = "chardet";}
   {attr = "chardet_5";}
+  {attr = "defusedxml";}
+  {attr = "dill";}
+  {
+    attr = "odfpy";
+    pyImport = "odf";
+  }
+  {attr = "puremagic";}
+  {attr = "pypdf";}
+  {
+    attr = "python-docx";
+    pyImport = "docx";
+  }
+  {attr = "pyxlsb";}
+  {attr = "xlrd";}
   {attr = "tomli";}
   {attr = "pytokens";}
   {attr = "black";} # mypyc speedups optional; ships a pure fallback

@@ -6,7 +6,7 @@ diff --git a/libc-top-half/musl/include/time.h b/libc-top-half/musl/include/time
  #endif
  
 -#ifdef __wasilibc_unmodified_upstream /* WASI has no timezone tables */
-+/* wasix: tzname is defined+weak_aliased in __tz.c (stub: always UTC), so declare it */
++/* wasix: tzname is defined+weak_aliased in __tz.c, so declare it */
  extern char *tzname[2];
 -#endif
  
@@ -16,7 +16,7 @@ diff --git a/libc-top-half/musl/include/time.h b/libc-top-half/musl/include/time
  #if defined(_XOPEN_SOURCE) || defined(_BSD_SOURCE) || defined(_GNU_SOURCE)
  char *strptime (const char *__restrict, const char *__restrict, struct tm *__restrict);
 -#ifdef __wasilibc_unmodified_upstream /* WASI has no timezone tables */
-+/* wasix: daylight/timezone are defined+weak_aliased in __tz.c (stub: 0/UTC) */
++/* wasix: daylight/timezone are defined+weak_aliased in __tz.c */
  extern int daylight;
  extern long timezone;
 -#endif

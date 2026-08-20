@@ -1,5 +1,5 @@
-# One ABI variant of the wasix libc, built from source. It needs *a* clang, not the
-# fork LLVM, since the Makefile supplies the ABI flags itself.
+# One ABI variant of the wasix libc, built from source with the WASIX LLVM
+# release tools.
 {
   lib,
   stdenv,
@@ -8,7 +8,7 @@
   rustPlatform,
   nix-update-script,
   writeText,
-  llvmPackages_21,
+  wasix-llvm,
   gnumake,
   rsync,
   python3,
@@ -105,9 +105,7 @@ in
 
     nativeBuildInputs = [
       # Unwrapped: wasix-libc drives the target itself.
-      llvmPackages_21.clang-unwrapped
-      llvmPackages_21.llvm
-      llvmPackages_21.lld
+      wasix-llvm
       gnumake
       rsync
       python3
@@ -121,14 +119,15 @@ in
     # defensive callers. tzname, inet-addr and sched unhide declarations sitting
     # behind __wasilibc_unmodified_upstream while the symbols themselves link, so a
     # consumer naming one gets "undeclared identifier"; inet-addr also adds musl's
-    # inet_addr.c, missing from the Makefile source list. fcntl-locking exposes the
-    # record-lock API but returns ENOSYS until Wasmer provides shared lock state.
-    # xsi-signal is the same unhiding for the XSI signal calls (siginterrupt and
-    # friends), which are built on sigaction.
+    # inet_addr.c, missing from both Makefile source lists. timezone-data restores
+    # zoneinfo loading on WASIX without mmap. fcntl-locking exposes the record-lock
+    # API but returns ENOSYS until Wasmer provides shared lock state. xsi-signal is
+    # the same unhiding for XSI signal calls, which are built on sigaction.
     patches = [
       ./libc-select-exceptfds.patch
       ./wasix-libc-tzname.patch
       ./wasix-libc-inet-addr.patch
+      ./wasix-libc-timezone-data.patch
       ./wasix-libc-sched.patch
       ./wasix-libc-fcntl-locking.patch
       ./wasix-libc-xsi-signal.patch

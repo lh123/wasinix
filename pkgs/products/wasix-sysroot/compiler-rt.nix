@@ -8,9 +8,8 @@
   cmake,
   ninja,
   python3,
-  # the fork LLVM; its .llvm.monorepoSrc is the tree we build compiler-rt from
-  # (the same one the toolchain came from).
-  llvm,
+  monorepoSrc,
+  llvmTools,
   version,
   # per-variant wasix-libc cmake toolchain file (selected in default.nix).
   toolchainFile,
@@ -26,15 +25,13 @@ stdenvNoCC.mkDerivation {
 
   pname = "wasix-compiler-rt-${name}";
   inherit version;
-  src = llvm.llvm.monorepoSrc;
+  src = monorepoSrc;
 
   nativeBuildInputs = [
     cmake
     ninja
     python3
-    llvm.clang-unwrapped
-    llvm.lld
-    llvm.llvm
+    llvmTools
   ];
 
   # Build the compiler-rt subproject out-of-source (the hook cd's into ./build).

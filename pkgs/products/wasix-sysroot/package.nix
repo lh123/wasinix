@@ -7,7 +7,8 @@
   wasix-flang,
   ...
 }: let
-  inherit (wasix-llvm.passthru) llvm llvmVersion;
+  inherit (wasix-llvm.passthru) llvmVersion monorepoSrc;
+  llvmTools = wasix-llvm;
   flang = wasix-flang;
   inherit (pkgs) lib;
   # One sysroot variant per profile, encoded {eh, pic, exnref}; PIC needs EH.
@@ -47,7 +48,7 @@
   # file read. The prefix-map is computed here because it needs the source path
   # ($PWD before the hook cd's into ./build) and clang's resource dir.
   runtimesPreConfigure = ''
-    export CC=clang CXX=clang++ NM=llvm-nm AR=llvm-ar RANLIB=llvm-ranlib STRIP=llvm-strip
+    export CC=clang CXX=clang++ NM=llvm-nm AR=llvm-ar RANLIB=llvm-ranlib
     resource_dir="$(clang -print-resource-dir)"
     prefix_map="-ffile-prefix-map=$PWD=. -ffile-prefix-map=$resource_dir=/clang"
     cmakeFlagsArray+=(
@@ -68,13 +69,13 @@
     libc = pkgs.callPackage ./libc.nix {inherit eh pic exnref;};
 
     compiler-rt = pkgs.callPackage ./compiler-rt.nix {
-      inherit name pic llvm toolchainFile runtimesPreConfigure;
+      inherit name pic monorepoSrc llvmTools toolchainFile runtimesPreConfigure;
       version = llvmVersion;
       sysroot = mkSysroot "${name}-rtdeps" [libc];
     };
 
     libcxx = pkgs.callPackage ./libcxx.nix {
-      inherit name eh pic llvm toolchainFile runtimesPreConfigure;
+      inherit name eh pic monorepoSrc llvmTools toolchainFile runtimesPreConfigure;
       version = llvmVersion;
       sysroot = mkSysroot "${name}-cxxdeps" [libc compiler-rt];
     };
@@ -87,17 +88,17 @@
     # The Fortran and OpenMP runtimes stage against the full sysroot, unlike
     # compiler-rt and libcxx, which build the stages it is made of.
     flangRt = pkgs.callPackage ./flang-rt.nix {
-      inherit name pic flang llvm toolchainFile sysroot runtimesPreConfigure;
+      inherit name pic flang monorepoSrc llvmTools toolchainFile sysroot runtimesPreConfigure;
       version = llvmVersion;
     };
 
     openmp = pkgs.callPackage ./openmp.nix {
-      inherit name pic llvm toolchainFile sysroot runtimesPreConfigure;
+      inherit name pic monorepoSrc llvmTools toolchainFile sysroot runtimesPreConfigure;
       version = llvmVersion;
     };
 
     test = pkgs.callPackage ./tests/sysroot-test.nix {
-      inherit name eh pic toolchainFile sysroot llvm;
+      inherit name eh pic toolchainFile sysroot llvmTools;
     };
   in {
     inherit name eh pic exnref libc compiler-rt libcxx sysrootSubdir sysroot flangRt openmp test;

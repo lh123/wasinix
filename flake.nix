@@ -93,7 +93,7 @@
     lib = wasix.pkgs.lib;
     wasixLib = import ./pkgs/lib {inherit lib;};
 
-    # From-source toolchain (LLVM fork + libc + runtimes + sysroot), see pkgs/toolchain.
+    # WASIX toolchain (LLVM release tools + libc + runtimes + sysroot), see pkgs/toolchain.
     toolchain = wasix.toolchain;
 
     treefmtEval = treefmt-nix.lib.evalModule wasix.pkgs {
@@ -480,6 +480,10 @@
         wasmerPackages = wasix.wasmerPackages;
         # <attr> = wasm cross build of python3.pkgs.<attr>; .tests = import smoke-test
         pythonWheels = wasix.pythonWheels;
+        # Runtime wheel closure used by the investigation sandbox.
+        sandboxPythonWheels = wasix.sandboxPythonWheels;
+        # Dependency-free investigation sandbox, including commands and wheels.
+        sandboxWebc = wasix.sandboxWebc;
         # all shipped wheels + transitive deps as a static PEP 503 index
         pythonRegistry = wasix.pythonRegistry;
         # the crate patch tree minted as publishable +wasix.N fork builds

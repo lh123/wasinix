@@ -328,6 +328,18 @@
     py313 = mkPythonWheels "py313" "python313" (e: !isNoarch e);
     py314 = mkPythonWheels "py314" "python314" (e: !isNoarch e);
   };
+  sandboxPythonWheels = {
+    py313 = import ./sandbox-python-wheels.nix {
+      inherit pkgs lib;
+      python3 = nixpkgsByProfile.exnrefEhpic.python313;
+      pythonWheels = pythonWheels.py313;
+    };
+    py314 = import ./sandbox-python-wheels.nix {
+      inherit pkgs lib;
+      python3 = nixpkgsByProfile.exnrefEhpic.python314;
+      pythonWheels = pythonWheels.py314;
+    };
+  };
 
   # The overlay cargo registry: the minted +wasix.N payload and its checks. The
   # server itself ships as the overlay package wasmerPackages.wasix-cargo-registry
@@ -358,6 +370,29 @@
   preferredProfilePackagesWithWebc = wasmerLayer.preferredProfilePackages;
   # Public package names and aliases; canonical-only consumers use the inventory.
   inherit (wasmerLayer) wasmerPackages wasmerPackageInventory allWasmerPackages libraryTestPkgs;
+  sandboxWebcComponentNames = [
+    "bash"
+    "coreutils"
+    "curl"
+    "find"
+    "grep"
+    "jq"
+    "sed"
+  ];
+  mkSandboxWebc = pythonAttr: wheelSet:
+    import ./sandbox-webc.nix {
+      inherit pkgs lib;
+      wasmer = wasmerRuntime;
+      components = lib.genAttrs (sandboxWebcComponentNames ++ [pythonAttr]) (
+        name: wasmerPackages.${name}.webc
+      );
+      wheels = sandboxPythonWheels.${wheelSet};
+      pythonVersion = nixpkgsByProfile.exnrefEhpic.${pythonAttr}.pythonVersion;
+    };
+  sandboxWebc = {
+    py313 = mkSandboxWebc "python313" "py313";
+    py314 = mkSandboxWebc "python314" "py314";
+  };
 
   # The shipped wheels plus their transitive deps as one static PEP 503 index over
   # both interpreters: a resolver picks the right file by its cp313/cp314 tag.
@@ -387,5 +422,5 @@ in {
   preferredProfilePackages = preferredProfilePackagesWithWebc;
   inherit shippedCommands wasmerPackages wasmerPackageInventory toolchainTestPkgs abiChecks;
   inherit libraryTestPkgs;
-  inherit pythonWheels pythonRegistry cargoRegistry;
+  inherit pythonWheels sandboxPythonWheels sandboxWebc pythonRegistry cargoRegistry;
 }

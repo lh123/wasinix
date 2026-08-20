@@ -61,8 +61,8 @@ run under Wasmer through `pkgs/wasmer/test-lib.nix`.
 - `legacyPackages.<system>`: the complete build trees
 
 The main legacy trees are `toolchain`, `packagesByProfile`, `nativePackages`,
-`wasmerPackages`, `pythonWheels`, `pythonRegistry`, `allWasmerPackages`,
-`scripts`, and `ci`. `flake.nix` is the exact inventory.
+`wasmerPackages`, `pythonWheels`, `sandboxWebc`, `pythonRegistry`,
+`allWasmerPackages`, `scripts`, and `ci`. `flake.nix` is the exact inventory.
 
 `legacyPackages.<system>.ci` flattens the build trees to dotted job names.
 Unsupported and broken packages are filtered before becoming jobs.

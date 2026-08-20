@@ -9,6 +9,17 @@ diff --git a/Makefile b/Makefile
          network/in6addr_any.c \
          network/in6addr_loopback.c \
          network/proto.c \
+diff --git a/Makefile-eh b/Makefile-eh
+--- a/Makefile-eh
++++ b/Makefile-eh
+@@ -148,6 +148,7 @@
+ 	    network/inet_ntoa.c \
+         network/inet_pton.c \
+         network/inet_aton.c \
++        network/inet_addr.c \
+         network/in6addr_any.c \
+         network/in6addr_loopback.c \
+         network/proto.c \
 diff --git a/libc-top-half/musl/include/arpa/inet.h b/libc-top-half/musl/include/arpa/inet.h
 --- a/libc-top-half/musl/include/arpa/inet.h
 +++ b/libc-top-half/musl/include/arpa/inet.h

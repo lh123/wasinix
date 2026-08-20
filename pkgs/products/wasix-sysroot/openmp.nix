@@ -6,7 +6,8 @@
   cmake,
   ninja,
   python3,
-  llvm,
+  monorepoSrc,
+  llvmTools,
   version,
   toolchainFile,
   sysroot,
@@ -19,7 +20,7 @@ stdenvNoCC.mkDerivation {
 
   pname = "wasix-openmp-${name}";
   inherit version;
-  src = llvm.llvm.monorepoSrc;
+  src = monorepoSrc;
 
   # wasm has no dynamic-arity call, so __kmp_invoke_microtask switches on argc, and
   # upstream stops at 15: a wider region aborts with "Too many args to microtask".
@@ -29,9 +30,7 @@ stdenvNoCC.mkDerivation {
     cmake
     ninja
     python3
-    llvm.clang-unwrapped
-    llvm.lld
-    llvm.llvm
+    llvmTools
   ];
 
   # CMAKE_SOURCE_DIR == the openmp dir makes OPENMP_STANDALONE_BUILD auto-true. The
