@@ -1,0 +1,53 @@
+name: Build official curl
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: build-official-curl-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build official curl webc
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      NIX_CONFIG: |
+        accept-flake-config = true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free runner disk
+        uses: ./.github/actions/free-disk
+
+      - name: Set up Nix
+        uses: ./.github/actions/setup-nix
+
+      - name: Resolve curl webc derivation
+        run: nix path-info --derivation .#wasmerPackages.curl.webc
+
+      - name: Build curl webc
+        run: nix build --no-link --print-build-logs .#wasmerPackages.curl.webc
+
+      - name: Collect curl webc
+        run: |
+          mkdir -p artifact
+          while IFS= read -r output; do
+            find -L "$output" -type f -name '*.webc' \
+              -exec cp {} artifact/ \;
+          done < <(nix path-info .#wasmerPackages.curl.webc)
+          test -n "$(find artifact -type f -name '*.webc' -print -quit)"
+
+      - name: Upload curl webc
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: official-curl-webc
+          path: artifact/*.webc
+          if-no-files-found: error
+          compression-level: 0
