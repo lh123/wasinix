@@ -7,7 +7,29 @@
   helpers,
   ...
 }:
-helpers.libTweaks {} (prev.zstd.override {
-  bashNonInteractive = final.buildPackages.bashNonInteractive;
-  gnugrep = final.buildPackages.gnugrep;
-})
+helpers.wasmRename {wasmName = "zstd";} (
+  helpers.libTweaks {
+    passthru.wasix.shipped = true;
+    passthru.wasmer.commands = [
+      {name = "zstd";}
+      {
+        name = "unzstd";
+        module = "zstd";
+        wasm = "zstd.wasm";
+        output = "unzstd.wasm";
+        mainArgs = ["-d"];
+      }
+      {
+        name = "zstdcat";
+        module = "zstd";
+        wasm = "zstd.wasm";
+        output = "zstdcat.wasm";
+        mainArgs = ["-d" "-c"];
+      }
+    ];
+  }
+  (prev.zstd.override {
+    bashNonInteractive = final.buildPackages.bashNonInteractive;
+    gnugrep = final.buildPackages.gnugrep;
+  })
+)

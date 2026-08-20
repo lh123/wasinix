@@ -3,7 +3,6 @@
 # needs a flag/patch/test/passthru.
 [
   "brotli"
-  "bzip2"
   "editline" # nix repl
   "expat"
   "gmp"
@@ -24,5 +23,4 @@
   "popt" # rsync
   "tinyxml-2"
   "toml11" # nix
-  "xz"
 ]

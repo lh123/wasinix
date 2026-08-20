@@ -372,12 +372,24 @@
   inherit (wasmerLayer) wasmerPackages wasmerPackageInventory allWasmerPackages libraryTestPkgs;
   sandboxWebcComponentNames = [
     "bash"
+    "bzip2"
     "coreutils"
     "curl"
+    "diffutils"
+    "file"
     "find"
+    "gawk"
     "grep"
+    "gzip"
     "jq"
+    "patch"
+    "rg"
     "sed"
+    "tar"
+    "which"
+    "xxd"
+    "xz"
+    "zstd"
   ];
   mkSandboxWebc = pythonAttr: wheelSet:
     import ./sandbox-webc.nix {
