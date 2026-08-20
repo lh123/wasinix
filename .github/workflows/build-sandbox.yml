@@ -138,10 +138,7 @@ jobs:
             exit 0
           fi
 
-          staging_cache=$(mktemp -d)
-          nix copy --to "file://$staging_cache?compression=zstd" "${paths[@]}"
-          rm -rf /tmp/nix-binary-cache
-          mv "$staging_cache" /tmp/nix-binary-cache
+          nix copy --to "file:///tmp/nix-binary-cache?compression=zstd" "${paths[@]}"
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Save Nix binary cache
