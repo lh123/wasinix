@@ -3,28 +3,40 @@
 # brotli and zstd auto-thread; the other *Support flags need libs we don't
 # package yet (nghttp2, c-ares, libidn2, libpsl, ...).
 {
+  final,
   prev,
   helpers,
-  preferredProfilePackages,
   ...
 }:
-helpers.wasmRename {wasmName = "curl";} (helpers.libTweaks {
+let
+  curlRevision = "ab18c04218ff316cd67b1e928c5cee579b2f66a0";
+  curlSource = final.fetchurl {
+    url = "https://github.com/curl/curl/archive/${curlRevision}.tar.gz";
+    hash = "sha256-GB9dqMICElKx9o+iL7N91paPHfQ6/26Y8sAnMCT1/Pg=";
+  };
+  curlPackage = helpers.libTweaks {
     passthru.wasix.shipped = true;
-    # wcurl is a target-side wrapper script; it execs /bin/bash, mounted from the
-    # bash webc dependency at load (like git's SHELL_PATH=/bin/bash). curl-config
-    # stays a build-host dev script in -dev (git's build runs it for link flags).
-    passthru.wasmer.dependencies = [preferredProfilePackages.bash];
-    # patchShebangs bakes the build bash into wcurl, which cross curl forbids in
-    # $bin (outputChecks.disallowedReferences); repoint it at the mounted
-    # /bin/bash. No -e guard on purpose: if a curl bump drops wcurl, sed errors
-    # and fails the build, surfacing this fixup instead of silently no-op'ing.
-    postFixup = ''
-      sed -i '1s|^#!.*|#!/bin/bash|' "''${bin:-$out}/bin/wcurl"
+    pname = "curl";
+    version = "8.4.0";
+    src = curlSource;
+    patches = _: [
+      ./patches/curl-0001-WASIX-Add-source-changes.patch
+      ./patches/curl-0002-Remove-defines-in-setup-vms.h-that-cause-undefined-s.patch
+      ./patches/curl-0003-Make-sure-no-unsupported-flags-are-passed-to-send-an.patch
+      ./patches/curl-0004-Fix-the-cmake-scripts-not-detecting-poll-under-WASIX.patch
+      ./patches/curl-0005-Link-Brotli-common-for-static-WASIX-builds.patch
+    ];
+    nativeBuildInputs = [final.buildPackages.autoreconfHook];
+    postPatch = _: ''
+      patchShebangs scripts
     '';
+    preConfigure = _: ''
+      substituteInPlace ./config.guess --replace-fail /usr/bin/uname uname
+      sed -e 's|/usr/bin|/no-such-path|g' -i.bak configure
+    '';
+    configureFlags = old: final.lib.filter (flag: flag != "--with-ca-fallback") old;
   } (prev.curlMinimal.override {
-    # Null the target shell package: cross curl would add the wasm bash-static
-    # to buildInputs, and it can't build under EH (fork is hidden). wcurl gets
-    # its shell from the bash webc dependency above instead.
+    # The static cross build does not need a target shell.
     runtimeShellPackage = null;
     brotliSupport = true;
     c-aresSupport = false;
@@ -41,4 +53,6 @@ helpers.wasmRename {wasmName = "curl";} (helpers.libTweaks {
     scpSupport = false;
     zlibSupport = true;
     zstdSupport = true;
-  }))
+  });
+in
+helpers.wasmRename {wasmName = "curl";} curlPackage

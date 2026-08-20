@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: wasinix <wasix@localhost>
+Date: Thu, 20 Aug 2026 00:00:00 +0000
+Subject: [PATCH] curl: link Brotli common for static builds
+
+---
+ configure.ac | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 2fc9f2f..3767c6d 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1404,7 +1404,7 @@ if test X"$OPT_BROTLI" != Xno; then
+     CURL_CHECK_PKGCONFIG(libbrotlidec)
+
+     if test "$PKGCONFIG" != "no" ; then
+-      LIB_BROTLI=`$PKGCONFIG --libs-only-l libbrotlidec`
++      LIB_BROTLI="`$PKGCONFIG --libs-only-l libbrotlidec` -lbrotlicommon"
+       LD_BROTLI=`$PKGCONFIG --libs-only-L libbrotlidec`
+       CPP_BROTLI=`$PKGCONFIG --cflags-only-I libbrotlidec`
+       version=`$PKGCONFIG --modversion libbrotlidec`
+@@ -1424,7 +1424,7 @@ if test X"$OPT_BROTLI" != Xno; then
+
+   dnl if given with a prefix, we set -L and -I based on that
+   if test -n "$PREFIX_BROTLI"; then
+-    LIB_BROTLI="-lbrotlidec"
++    LIB_BROTLI="-lbrotlidec -lbrotlicommon"
+     LD_BROTLI=-L${PREFIX_BROTLI}/lib$libsuff
+     CPP_BROTLI=-I${PREFIX_BROTLI}/include
+     DIR_BROTLI=${PREFIX_BROTLI}/lib$libsuff
+-- 
+2.48.1
