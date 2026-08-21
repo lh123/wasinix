@@ -4,7 +4,7 @@
   testLib,
   ...
 }: let
-  native = [pkgs.gnutar];
+  native = [pkgs.gnutar pkgs.gzip];
   wasix = [wasmerPkgs.tar];
   # Archive bytes carry mtimes/uids that differ; compare the listing and the
   # extracted *content* instead.
@@ -47,5 +47,14 @@ in {
     mkdir dst
     tar --no-same-owner -xf out.tar -C dst
     cat dst/src/nested/file
+  '';
+
+  gzip-roundtrip = cmp "tar-gzip-roundtrip" ''
+    mkdir src
+    printf 'compressed\n' > src/file
+    tar -czf out.tar.gz src
+    rm -rf src
+    tar --no-same-owner -xzf out.tar.gz
+    cat src/file
   '';
 }

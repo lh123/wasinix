@@ -1,11 +1,14 @@
 {
   prev,
   helpers,
+  preferredProfilePackages,
   ...
 }:
 helpers.wasmRename {wasmName = "tar";} (
   helpers.libTweaks {
     passthru.wasix.shipped = true;
+    passthru.wasix.supportedProfiles = ["off"];
+    passthru.wasmer.dependencies = [preferredProfilePackages.gzip];
     configureFlags = [
       "--disable-rmt"
       # Keep archive compression support intentionally narrow for now.
@@ -25,8 +28,6 @@ helpers.wasmRename {wasmName = "tar";} (
                        'getgroups (_GL_UNUSED int n, _GL_UNUSED gid_t *groups)'
       substituteInPlace lib/rtapelib.c \
         --replace-fail '    status = fork ();' '    errno = ENOSYS; status = -1;'
-      substituteInPlace src/misc.c \
-        --replace-fail '  pid_t p = fork ();' '  errno = ENOSYS; pid_t p = -1;'
     '';
     preConfigure = ''
       export ac_cv_func_getgroups=yes
