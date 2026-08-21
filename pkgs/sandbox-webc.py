@@ -15,6 +15,7 @@ from typing import Any, Iterable, Mapping
 
 
 PYTHON_ALIASES = ("python", "python3")
+DEFAULT_PATH = "/usr/local/bin:/bin:/usr/bin"
 
 
 def parse_args() -> argparse.Namespace:
@@ -176,6 +177,8 @@ def inherit_command_environments(commands: dict[str, dict[str, Any]]) -> None:
                     f"values for {key!r}: {other_value!r} and {value!r}"
                 )
             inherited[key] = (name, value)
+
+    inherited.setdefault("PATH", ("sandbox", DEFAULT_PATH))
 
     if "bash" not in commands:
         raise ValueError("sandbox contains no bash command")
