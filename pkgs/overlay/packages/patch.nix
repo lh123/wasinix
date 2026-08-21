@@ -15,6 +15,12 @@ helpers.wasmRename {wasmName = "patch";} (
       substituteInPlace lib/opendirat.h \
         --replace-fail 'DIR *opendirat (int, char const *, int, int *)' \
                        'DIR *rpl_opendirat (int, char const *, int, int *)'
+      substituteInPlace lib/getgroups.c \
+        --replace-fail 'getgroups (_GL_UNUSED int n, _GL_UNUSED GETGROUPS_T *groups)' \
+                       'getgroups (_GL_UNUSED int n, _GL_UNUSED gid_t *groups)'
+    '';
+    preConfigure = ''
+      export ac_cv_func_getgroups=yes
     '';
   }
   prev.patch
