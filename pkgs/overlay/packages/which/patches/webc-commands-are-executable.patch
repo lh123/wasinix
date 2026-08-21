@@ -1,0 +1,8 @@
+diff --git a/bash.c b/bash.c
+--- a/bash.c
++++ b/bash.c
+@@ -284,0 +285,4 @@
++#if defined(__wasi__)
++  r |= FS_EXECABLE;
++#endif
++

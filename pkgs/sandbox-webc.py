@@ -401,6 +401,11 @@ def verify(
             ["-c", "printf 'gunzip-shell-ok\\n' | gzip -cf | gunzip"],
             "gunzip-shell-ok\n",
         ),
+        (
+            "bash",
+            ["-c", "which cut"],
+            "/bin/cut\n",
+        ),
     ]
     for entrypoint, arguments, expected in checks:
         process = subprocess.run(
