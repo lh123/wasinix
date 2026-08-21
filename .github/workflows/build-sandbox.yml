@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - test/sandbox-components-parallel
   workflow_dispatch:
     inputs:
       package:
@@ -25,6 +26,7 @@ concurrency:
 jobs:
   build:
     name: Build sandbox
+    if: github.ref_name != 'test/sandbox-components-parallel'
     runs-on: ubuntu-24.04
     timeout-minutes: 350
     env:
@@ -147,3 +149,132 @@ jobs:
         with:
           path: /tmp/nix-binary-cache
           key: ${{ steps.nix-binary-cache.outputs.cache-primary-key }}
+
+  diagnose-components:
+    name: Diagnose ${{ matrix.component }}
+    if: github.ref_name == 'test/sandbox-components-parallel'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - bzip2
+          - diffutils
+          - file
+          - gawk
+          - gzip
+          - patch
+          - rg
+          - tar
+          - which
+          - xxd
+          - xz
+          - zstd
+    env:
+      NIX_CONFIG: |
+        accept-flake-config = true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free runner disk
+        uses: ./.github/actions/free-disk
+
+      - name: Set up Nix
+        uses: ./.github/actions/setup-nix
+
+      - name: Restore Nix binary cache
+        id: nix-binary-cache
+        uses: actions/cache/restore@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        with:
+          path: /tmp/nix-binary-cache
+          key: nix-sandbox-v2-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.component }}
+          restore-keys: |
+            nix-sandbox-v2-${{ runner.os }}-
+            nix-sandbox-v1-${{ runner.os }}-
+            nix-python-v2-${{ runner.os }}-
+            nix-python-v1-${{ runner.os }}-
+
+      - name: Register GitHub binary cache
+        if: always() && steps.nix-binary-cache.outcome == 'success'
+        shell: bash
+        run: |
+          mkdir -p /tmp/nix-binary-cache
+          {
+            echo 'NIX_CONFIG<<EOF'
+            echo 'accept-flake-config = true'
+            echo 'extra-substituters = file:///tmp/nix-binary-cache?trusted=true'
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
+
+      - name: Build component WebC
+        id: component-build
+        shell: bash
+        run: |
+          mkdir -p component-diagnostic
+          target=".#wasmerPackages.${{ matrix.component }}.webc"
+          set +e
+          nix build --fallback --no-link "$target" \
+            2>&1 | tee component-diagnostic/build.log
+          status=${PIPESTATUS[0]}
+          set -e
+          printf '%s\n' "$status" > component-diagnostic/status
+          printf '%s\n' "${{ matrix.component }}" > component-diagnostic/component
+
+          if [ "$status" -eq 0 ]; then
+            result=success
+            marker='✅'
+          else
+            result=failure
+            marker='❌'
+          fi
+          echo "result=$result" >> "$GITHUB_OUTPUT"
+          {
+            echo "### $marker ${{ matrix.component }}"
+            echo
+            echo "Target: \`$target\`"
+            echo "Exit code: \`$status\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload component diagnostic
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: component-diagnostic-${{ matrix.component }}
+          path: component-diagnostic
+          if-no-files-found: error
+
+  component-summary:
+    name: Summarize component diagnostics
+    if: always() && github.ref_name == 'test/sandbox-components-parallel'
+    needs: diagnose-components
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download component diagnostics
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: component-diagnostic-*
+          path: component-diagnostics
+
+      - name: Write component summary
+        shell: bash
+        run: |
+          {
+            echo '# Sandbox component diagnostics'
+            echo
+            echo 'Individual build failures are diagnostic and do not fail this workflow.'
+            echo
+            echo '| Component | Result | Exit code |'
+            echo '| --- | --- | ---: |'
+            for dir in component-diagnostics/component-diagnostic-*; do
+              component=$(cat "$dir/component")
+              status=$(cat "$dir/status")
+              if [ "$status" -eq 0 ]; then
+                result='✅ success'
+              else
+                result='❌ failure'
+              fi
+              echo "| $component | $result | $status |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
