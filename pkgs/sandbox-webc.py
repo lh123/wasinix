@@ -148,6 +148,47 @@ def emit_table(lines: list[str], name: str, values: Mapping[str, Any]) -> None:
         emit_table(lines, f"{name}.{key}", value)
 
 
+def command_environment(name: str, command: Mapping[str, Any]) -> dict[str, str]:
+    annotations = command.get("annotations", {})
+    wasi = annotations.get("wasi", {})
+    raw_environment = wasi.get("env", [])
+    if not isinstance(raw_environment, list):
+        raise TypeError(f"command {name!r} has a non-list environment")
+    environment: dict[str, str] = {}
+    for assignment in raw_environment:
+        if not isinstance(assignment, str):
+            raise TypeError(f"command {name!r} has a non-string environment entry")
+        key, separator, value = assignment.partition("=")
+        if not separator or not key:
+            raise ValueError(f"command {name!r} has an invalid environment entry")
+        environment[key] = value
+    return environment
+
+
+def inherit_command_environments(commands: dict[str, dict[str, Any]]) -> None:
+    inherited: dict[str, tuple[str, str]] = {}
+    for name, command in commands.items():
+        for key, value in command_environment(name, command).items():
+            if key in inherited and inherited[key][1] != value:
+                other_name, other_value = inherited[key]
+                raise ValueError(
+                    f"commands {other_name!r} and {name!r} require conflicting "
+                    f"values for {key!r}: {other_value!r} and {value!r}"
+                )
+            inherited[key] = (name, value)
+
+    if "bash" not in commands:
+        raise ValueError("sandbox contains no bash command")
+    bash = commands["bash"]
+    annotations = dict(bash.get("annotations", {}))
+    wasi = dict(annotations.get("wasi", {}))
+    wasi["env"] = [
+        f"{key}={value}" for key, (_, value) in sorted(inherited.items())
+    ]
+    annotations["wasi"] = wasi
+    bash["annotations"] = annotations
+
+
 def render_manifest(
     modules: Iterable[Mapping[str, Any]],
     commands: Iterable[Mapping[str, Any]],
@@ -321,6 +362,7 @@ def assemble(
             raise ValueError(f"Python alias already exists: {alias}")
         commands[alias] = {**commands[versioned_python], "name": alias}
 
+    inherit_command_environments(commands)
     install_wheels(wheels, filesystem_roots["/usr/local"], python_version)
     package_root.mkdir(parents=True, exist_ok=True)
     manifest_text = render_manifest(
@@ -385,6 +427,11 @@ def verify(
                 "print('python-shell-ok')\"",
             ],
             "python-shell-ok\n",
+        ),
+        (
+            "bash",
+            ["-c", "printf text > /tmp/file-check; file /tmp/file-check >/dev/null"],
+            "",
         ),
         (
             "bash",
