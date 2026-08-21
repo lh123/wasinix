@@ -156,7 +156,7 @@ in {
     wasixPkgs = [bashPkg];
     script = ''
       out=$(sh -c 'echo "argv0=$0 path=$PATH"')
-      if [ "$out" != "argv0=sh path=/bin:/usr/bin" ]; then
+      if [ "$out" != "argv0=sh path=/usr/local/bin:/bin:/usr/bin" ]; then
         echo "unexpected sh invocation: $out"
         exit 1
       fi

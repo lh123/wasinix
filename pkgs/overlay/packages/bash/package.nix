@@ -77,13 +77,13 @@ in
       # profile, and bash also needs --fpcast-emu.
       WASIXCC_WASM_OPT_FLAGS = "--fpcast-emu";
       # nixpkgs bakes /no-such-path as the fallback PATH and command -p path.
-      # wasmer mounts a webc's dependency commands at /bin and /usr/bin, so an
-      # unset PATH must search there. Clang takes the last -D, hence the -U.
+      # Wasmer commands use /bin and /usr/bin; shell scripts use /usr/local/bin.
+      # Clang takes the last -D, hence the -U.
       NIX_CFLAGS_COMPILE = old:
         old
         + ''
-          -UDEFAULT_PATH_VALUE -DDEFAULT_PATH_VALUE="/bin:/usr/bin"
-          -USTANDARD_UTILS_PATH -DSTANDARD_UTILS_PATH="/bin:/usr/bin"
+          -UDEFAULT_PATH_VALUE -DDEFAULT_PATH_VALUE="/usr/local/bin:/bin:/usr/bin"
+          -USTANDARD_UTILS_PATH -DSTANDARD_UTILS_PATH="/usr/local/bin:/bin:/usr/bin"
         '';
     };
     # mkbuiltins et al. run on the build host: native cc, same gnu17 pin.
