@@ -8,7 +8,10 @@
   helpers,
   ...
 }:
-helpers.libTweaks {passthru.wasix.shipped = true;} (prev.ripgrep.overrideAttrs (_: {
+helpers.libTweaks {
+  patches = [./patches/ignore-generic-walk.patch];
+  passthru.wasix.shipped = true;
+} (prev.ripgrep.overrideAttrs (_: {
   postFixup = "";
   installCheckPhase = "";
 }))
