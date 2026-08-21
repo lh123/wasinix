@@ -12,15 +12,10 @@
     '';
   } oldProvider;
   xxd = prev.xxd.overrideAttrs (old: {
-    buildCommand =
-      builtins.replaceStrings
-      ["${oldProvider}"]
-      ["${provider}"]
-      old.buildCommand
-      + ''
-        cp --dereference "$out/bin/xxd" "$out/bin/xxd.wasm"
-        rm "$out/bin/xxd"
-      '';
+    buildCommand = ''
+      mkdir -p "$out/bin"
+      cp --dereference ${provider}/bin/xxd "$out/bin/xxd.wasm"
+    '';
     passthru = (old.passthru or {}) // {inherit provider;};
   });
 in
