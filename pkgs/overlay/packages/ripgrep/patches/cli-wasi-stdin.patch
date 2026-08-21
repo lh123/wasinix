@@ -4,29 +4,22 @@ diff --git a/crates/cli/src/lib.rs b/crates/cli/src/lib.rs
 @@ -1 +1,2 @@
 +#![cfg_attr(target_os = "wasi", feature(wasi_ext))]
  /*!
-@@ -243 +243,47 @@ pub fn is_readable_stdin() -> bool {
+@@ -243 +243,40 @@ pub fn is_readable_stdin() -> bool {
 -    #[cfg(not(any(unix, windows)))]
 +    #[cfg(target_os = "wasi")]
 +    fn imp() -> bool {
 +        use std::{
 +            fs::File,
-+            os::{fd::AsFd, wasi::fs::FileTypeExt},
++            os::{
++                fd::{FromRawFd, IntoRawFd},
++                wasi::fs::FileTypeExt,
++            },
 +        };
 +
-+        let stdin = std::io::stdin();
-+        let fd = match stdin.as_fd().try_clone_to_owned() {
-+            Ok(fd) => fd,
-+            Err(err) => {
-+                log::debug!(
-+                    "for heuristic stdin detection on WASI, \
-+                     could not clone stdin file descriptor \
-+                     (thus assuming stdin is not readable): {err}",
-+                );
-+                return false;
-+            }
-+        };
-+        let file = File::from(fd);
-+        let md = match file.metadata() {
++        let file = unsafe { File::from_raw_fd(0) };
++        let metadata = file.metadata();
++        let _ = file.into_raw_fd();
++        let md = match metadata {
 +            Ok(md) => md,
 +            Err(err) => {
 +                log::debug!(
