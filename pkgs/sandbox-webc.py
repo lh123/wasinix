@@ -386,6 +386,21 @@ def verify(
             ],
             "python-shell-ok\n",
         ),
+        (
+            "bash",
+            ["-c", "printf 'rg-stdin-ok\\n' | rg rg-stdin-ok"],
+            "rg-stdin-ok\n",
+        ),
+        (
+            "bash",
+            ["-c", "printf 'gzip-shell-ok\\n' | gzip -cf | zcat"],
+            "gzip-shell-ok\n",
+        ),
+        (
+            "bash",
+            ["-c", "printf 'gunzip-shell-ok\\n' | gzip -cf | gunzip"],
+            "gunzip-shell-ok\n",
+        ),
     ]
     for entrypoint, arguments, expected in checks:
         process = subprocess.run(

@@ -9,7 +9,10 @@
   ...
 }:
 helpers.libTweaks {
-  patches = [./patches/ignore-generic-walk.patch];
+  patches = [
+    ./patches/ignore-generic-walk.patch
+    ./patches/cli-wasi-stdin.patch
+  ];
   passthru.wasix.shipped = true;
 } (prev.ripgrep.overrideAttrs (_: {
   postFixup = "";

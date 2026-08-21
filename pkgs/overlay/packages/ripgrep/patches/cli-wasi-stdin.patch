@@ -1,0 +1,52 @@
+diff --git a/crates/cli/src/lib.rs b/crates/cli/src/lib.rs
+--- a/crates/cli/src/lib.rs
++++ b/crates/cli/src/lib.rs
+@@ -243 +243,47 @@ pub fn is_readable_stdin() -> bool {
+-    #[cfg(not(any(unix, windows)))]
++    #[cfg(target_os = "wasi")]
++    fn imp() -> bool {
++        use std::{
++            fs::File,
++            os::{fd::AsFd, wasi::fs::FileTypeExt},
++        };
++
++        let stdin = std::io::stdin();
++        let fd = match stdin.as_fd().try_clone_to_owned() {
++            Ok(fd) => fd,
++            Err(err) => {
++                log::debug!(
++                    "for heuristic stdin detection on WASI, \
++                     could not clone stdin file descriptor \
++                     (thus assuming stdin is not readable): {err}",
++                );
++                return false;
++            }
++        };
++        let file = File::from(fd);
++        let md = match file.metadata() {
++            Ok(md) => md,
++            Err(err) => {
++                log::debug!(
++                    "for heuristic stdin detection on WASI, \
++                     could not get file metadata for stdin \
++                     (thus assuming stdin is not readable): {err}",
++                );
++                return false;
++            }
++        };
++        let ft = md.file_type();
++        let is_file = ft.is_file();
++        let is_socket_stream = ft.is_socket_stream();
++        let is_socket_dgram = ft.is_socket_dgram();
++        let is_readable = is_file || is_socket_stream || is_socket_dgram;
++        log::debug!(
++            "for heuristic stdin detection on WASI, \
++             found that is_file={is_file}, \
++             is_socket_stream={is_socket_stream} and \
++             is_socket_dgram={is_socket_dgram}, \
++             and thus concluded that is_stdin_readable={is_readable}",
++        );
++        is_readable
++    }
++
++    #[cfg(not(any(unix, windows, target_os = "wasi")))]
