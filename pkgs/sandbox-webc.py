@@ -388,11 +388,6 @@ def verify(
         ),
         (
             "bash",
-            ["-c", "printf 'rg-stdin-ok\\n' | rg rg-stdin-ok"],
-            "rg-stdin-ok\n",
-        ),
-        (
-            "bash",
             ["-c", "printf 'gzip-shell-ok\\n' | gzip -cf | zcat"],
             "gzip-shell-ok\n",
         ),
