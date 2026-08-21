@@ -1,6 +1,9 @@
 diff --git a/crates/cli/src/lib.rs b/crates/cli/src/lib.rs
 --- a/crates/cli/src/lib.rs
 +++ b/crates/cli/src/lib.rs
+@@ -1 +1,2 @@
++#![cfg_attr(target_os = "wasi", feature(wasi_ext))]
+ /*!
 @@ -243 +243,47 @@ pub fn is_readable_stdin() -> bool {
 -    #[cfg(not(any(unix, windows)))]
 +    #[cfg(target_os = "wasi")]
