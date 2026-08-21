@@ -383,7 +383,6 @@
     "gzip"
     "jq"
     "patch"
-    "rg"
     "sed"
     "tar"
     "which"
