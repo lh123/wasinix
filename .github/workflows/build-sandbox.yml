@@ -113,7 +113,7 @@ jobs:
 
       - name: Export Nix binary cache
         id: export-nix-binary-cache
-        if: ${{ !cancelled() && steps.nix-binary-cache.outputs.cache-hit != 'true' && steps.sandbox-build.outputs.ready == 'true' && steps.sandbox-closure.outcome == 'success' }}
+        if: ${{ always() && !cancelled() && steps.nix-binary-cache.outputs.cache-hit != 'true' && steps.sandbox-build.outputs.ready == 'true' }}
         continue-on-error: true
         shell: bash
         run: |
@@ -142,7 +142,7 @@ jobs:
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       - name: Save Nix binary cache
-        if: ${{ !cancelled() && steps.nix-binary-cache.outputs.cache-hit != 'true' && steps.export-nix-binary-cache.outputs.ready == 'true' && steps.sandbox-closure.outcome == 'success' }}
+        if: ${{ always() && !cancelled() && steps.nix-binary-cache.outputs.cache-hit != 'true' && steps.export-nix-binary-cache.outputs.ready == 'true' }}
         uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: /tmp/nix-binary-cache
