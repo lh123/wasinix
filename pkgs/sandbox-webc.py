@@ -470,6 +470,11 @@ def verify(
             "pcm_s16le\n",
         ),
         (
+            "node",
+            ["-e", "console.log('edge-node-ok')"],
+            "edge-node-ok\n",
+        ),
+        (
             "bash",
             ["-c", "which cut"],
             "/bin/cut\n",
@@ -483,6 +488,10 @@ def verify(
                 "--quiet",
                 # ffmpeg (and any threaded module) needs the feature enabled.
                 "--enable-threads",
+                # edgejs's QuickJS needs a 4 MiB host stack (annotations cannot
+                # set this host limit).
+                "--stack-size",
+                "4194304",
                 str(webc),
                 "--entrypoint",
                 entrypoint,

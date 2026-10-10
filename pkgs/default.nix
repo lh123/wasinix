@@ -376,6 +376,7 @@
     "coreutils"
     "curl"
     "diffutils"
+    "edgejs"
     "ffmpeg"
     "file"
     "find"
