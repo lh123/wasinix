@@ -448,6 +448,11 @@ def verify(
         ),
         (
             "bash",
+            ["-c", "printf 'pandoc-shell-ok\\n' | pandoc -f markdown -t plain"],
+            "pandoc-shell-ok\n",
+        ),
+        (
+            "bash",
             ["-c", "which cut"],
             "/bin/cut\n",
         ),

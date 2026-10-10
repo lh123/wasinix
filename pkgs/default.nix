@@ -382,6 +382,7 @@
     "grep"
     "gzip"
     "jq"
+    "pandoc"
     "patch"
     "rg"
     "sed"
