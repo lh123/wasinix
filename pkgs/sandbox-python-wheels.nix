@@ -15,6 +15,7 @@
     odfpy = "odf";
     openpyxl = "openpyxl";
     pandas = "pandas";
+    pip = "pip";
     puremagic = "puremagic";
     pypdf = "pypdf";
     python-docx = "docx";

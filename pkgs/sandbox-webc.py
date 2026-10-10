@@ -433,6 +433,11 @@ def verify(
         ),
         (
             "bash",
+            ["-c", "python -m pip --version >/dev/null && echo pip-shell-ok"],
+            "pip-shell-ok\n",
+        ),
+        (
+            "bash",
             ["-c", "printf text > /tmp/file-check; file /tmp/file-check >/dev/null"],
             "",
         ),
