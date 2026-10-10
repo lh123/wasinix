@@ -118,6 +118,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p /tmp/nix-binary-cache
+          # nix copy creates its narinfo and nar files here; the restored
+          # cache can be owned by another user, leaving them unwritable.
+          sudo chown -R "$(id -u):$(id -g)" /tmp/nix-binary-cache
           closure=$(mktemp)
           candidates=$(mktemp)
           valid=$(mktemp)
