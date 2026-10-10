@@ -453,6 +453,19 @@ def verify(
         ),
         (
             "bash",
+            [
+                "-c",
+                # built-in lavfi source and PCM codec only: the package keeps no
+                # external codecs, so an image encoder is not available.
+                "ffmpeg -v error -f lavfi -i sine=frequency=440:duration=0.1 "
+                "-c:a pcm_s16le /tmp/tone.wav && ffprobe -v error "
+                "-show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "
+                "/tmp/tone.wav",
+            ],
+            "pcm_s16le\n",
+        ),
+        (
+            "bash",
             ["-c", "which cut"],
             "/bin/cut\n",
         ),
@@ -463,6 +476,8 @@ def verify(
                 wasmer,
                 "run",
                 "--quiet",
+                # ffmpeg (and any threaded module) needs the feature enabled.
+                "--enable-threads",
                 str(webc),
                 "--entrypoint",
                 entrypoint,

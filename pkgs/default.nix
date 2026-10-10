@@ -376,6 +376,7 @@
     "coreutils"
     "curl"
     "diffutils"
+    "ffmpeg"
     "file"
     "find"
     "gawk"
