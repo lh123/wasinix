@@ -20,14 +20,14 @@
   pic ? false,
   exnref ? false,
 }: let
-  # lh123/wasix-libc tracks upstream main plus the timezone-data fix, so pin a
-  # revision rather than an upstream tag.
-  version = "2026-10-11.1";
+  # lh123/wasix-libc is upstream main plus the WASIX fixes that have not landed
+  # yet, so pin a revision rather than an upstream tag.
+  version = "2026-10-11.2";
   src = fetchFromGitHub {
     owner = "lh123";
     repo = "wasix-libc";
-    rev = "fe404855d387f95b91327605ec29b832b91f890f";
-    hash = "sha256-3MwdbiAoOwFDfnzgXSH3cs7XTZogkilSm/MD9r8EdqI=";
+    rev = "5b148f5cfc49f4ae2b78d7c3e6185bd1acdafe60";
+    hash = "sha256-tvT2tQa4sTzEVOa12mupvl6OKA1Ui2JNoPMir4tWjhU=";
   };
 
   updateWrapper = buildPackages.writeShellApplication {
@@ -117,26 +117,8 @@ in
       writableTmpDirAsHomeHook
     ];
 
-    # select()/pselect() bail with ENOSYS when exceptfds is non-empty, spinning
-    # defensive callers. tzname, inet-addr and sched unhide declarations sitting
-    # behind __wasilibc_unmodified_upstream while the symbols themselves link, so a
-    # consumer naming one gets "undeclared identifier"; inet-addr also adds musl's
-    # inet_addr.c, missing from both Makefile source lists. timezone-data restores
-    # zoneinfo loading on WASIX without mmap. fcntl-locking exposes the record-lock
-    # API but returns ENOSYS until Wasmer provides shared lock state. xsi-signal is
-    # the same unhiding for XSI signal calls, which are built on sigaction.
-    patches = [
-      ./libc-select-exceptfds.patch
-      ./wasix-libc-tzname.patch
-      ./wasix-libc-inet-addr.patch
-      ./wasix-libc-timezone-data.patch
-      ./wasix-libc-sched.patch
-      ./wasix-libc-fcntl-locking.patch
-      ./wasix-libc-xsi-signal.patch
-    ];
-
     passthru.wasix.updateNotes = [
-      {message = "check whether libc-select-exceptfds.patch landed upstream (WASIX-TODO.md)";}
+      {message = "rebase the pinned fork's fixes onto the new upstream and drop the ones it took (WASIX-TODO.md)";}
     ];
 
     dontConfigure = true;

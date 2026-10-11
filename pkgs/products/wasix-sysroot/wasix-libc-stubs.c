@@ -35,9 +35,9 @@ int madvise(void *addr, size_t len, int advice) {
 // No per-CPU scheduling on wasm: always report CPU 0.
 int sched_getcpu(void) { return 0; }
 
-// No thread-priority niceness on wasm; report success without changing anything
-// (declaration unhidden by wasix-libc-sched.patch). Lets libzmq's
-// applySchedulingParameters link once _POSIX_THREAD_PRIORITY_SCHEDULING is set.
+// No thread-priority niceness on wasm; report success without changing anything.
+// Lets libzmq's applySchedulingParameters link once
+// _POSIX_THREAD_PRIORITY_SCHEDULING is set.
 int nice(int inc) {
   (void)inc;
   return 0;

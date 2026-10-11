@@ -1063,10 +1063,10 @@ current toolchain before relying on it.
 - Symptom: wasix-libc returned ENOSYS whenever `select()` or `pselect()`
   received non-empty `exceptfds`. Rsync treated it as transient and spun before
   its first transfer.
-- Fix: `sysroot/libc-select-exceptfds.patch` clears and ignores `exceptfds`,
+- Fix: the pinned `lh123/wasix-libc` fork clears and ignores `exceptfds`,
   which is sufficient for defensive callers such as rsync. True exceptional-fd
   semantics still require runtime support. The rsync copy test passes; upstream
-  the libc patch and drop it once merged.
+  the fork commit and drop it once merged.
 
 ### rsync copies files but hangs at exit: SIGUSR2 ignored for forked children 🟢
 
