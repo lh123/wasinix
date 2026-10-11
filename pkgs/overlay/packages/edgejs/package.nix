@@ -91,6 +91,36 @@
     tar -xOf ${pnpmArchive} package/package.json > "$out/package.json"
     cp ${src}/quickjs-wasm/pnpm/edge-pnpm.cjs "$out/edge-pnpm.cjs"
     cp ${src}/quickjs-wasm/pnpm/wasix-fs.cjs "$out/wasix-fs.cjs"
+    # pnpm loads its tarball worker from "./worker.js" next to pnpm.cjs, so the
+    # bundle is staged under that path; the shim installs the fs adapter in the
+    # worker thread before the bundle runs.
+    cat > "$out/worker.js" <<'EOF'
+'use strict'
+
+require('./wasix-fs.cjs')
+
+require('./worker.bundle.js')
+EOF
+  '';
+  # A command's main-args and env are applied when the runtime starts it as the
+  # run entrypoint; a shell that spawns /bin/pnpm gets the bare module. These
+  # wrappers carry the annotations and win on PATH, which lists /usr/local/bin
+  # first.
+  pnpmWrappers = final.runCommand "edgejs-pnpm-wrappers" {} ''
+    mkdir -p "$out/bin"
+    for name in pnpm npm; do
+      cat > "$out/bin/$name" <<'EOF'
+#!/bin/bash
+export HOME=/tmp
+export npm_config_network_concurrency=4
+export npm_config_node_linker=hoisted
+export npm_config_package_import_method=copy
+export npm_config_store_dir=/tmp/.pnpm-store
+export npm_config_update_notifier=false
+exec /bin/node /pnpm/edge-pnpm.cjs "$@"
+EOF
+      chmod +x "$out/bin/$name"
+    done
   '';
   etcTree = final.runCommand "edgejs-etc" {} ''
     cp -r ${src}/quickjs-wasm/etc "$out"
@@ -178,6 +208,7 @@ in
         fs = {
           "/etc" = etcTree;
           "/pnpm" = pnpmTree;
+          "/usr/local" = pnpmWrappers;
           "/usr/local/ssl" = sslTree;
         };
         # One module, four commands; npm runs the same pnpm CLI upstream ships.

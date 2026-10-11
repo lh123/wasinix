@@ -10,13 +10,19 @@ the ABI profiles, and `pkgs/set/mk-pkgs.nix` imports nixpkgs once per profile
 with the corresponding WASIX stdenv and language builders.
 
 Each profile is a complete nixpkgs package set. Overriding a dependency there
-therefore affects everything in that profile that consumes it. The language
-details live in:
+therefore affects everything in that profile that consumes it. The per-language
+and per-runtime details live in:
 
 - [`c.md`](c.md): LLVM, sysroots, wasixcc, profiles, and the cross stdenv
 - [`rust.md`](rust.md): the Rust toolchain, cargo-wasix, crate edits, and the
   cargo registry
 - [`python.md`](python.md): CPython, Python package overlays, and wheels
+- [`javascript.md`](javascript.md): the JS runtime in the sandbox webc, what
+  runs in it, and the 2D canvas gap
+
+The sandbox webc assembled from those package sets is described in
+[`sandbox.md`](sandbox.md): the components it ships, time handling, and how to
+run it.
 
 ## Products and overlays
 
