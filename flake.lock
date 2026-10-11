@@ -201,16 +201,17 @@
       "locked": {
         "lastModified": 1786984815,
         "narHash": "sha256-vl/34f5EXdK/7rSCCGcEY6A7IC90cPgIj6YmJ4j/GQ0=",
-        "ref": "refs/heads/main",
-        "rev": "d311915f4ba361453fd2f23449102c355221e536",
+        "ref": "refs/heads/wasix-compat-v7.5.0",
+        "rev": "363e1fd065ba1fe4df94de1aa190a80fcf457448",
         "revCount": 20818,
         "submodules": true,
         "type": "git",
-        "url": "https://github.com/wasmerio/wasmer"
+        "url": "https://github.com/lh123/wasmer"
       },
       "original": {
+        "ref": "wasix-compat-v7.5.0",
         "type": "git",
-        "url": "https://github.com/wasmerio/wasmer"
+        "url": "https://github.com/lh123/wasmer"
       }
     }
   },

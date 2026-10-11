@@ -9,7 +9,8 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     wasmer = {
-      url = "git+https://github.com/wasmerio/wasmer";
+      # wasmer with our WASIX compatibility fixes, on top of the v7.5.0 release
+      url = "git+https://github.com/lh123/wasmer?ref=wasix-compat-v7.5.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     treefmt-nix = {
@@ -34,39 +35,7 @@
     ...
   }: let
     system = "x86_64-linux";
-    wasmerPatches = [
-      # proc_fork must inherit the parent's signal dispositions; see WASIX-TODO.md
-      ./patches/wasmer-signal-inherit-on-fork.patch
-      # futex_wake dropped a wake when the first waiter was still
-      # mid-registration (Some(None)), starving a genuinely-sleeping waiter;
-      # deadlocked tokio multi-thread spawn+blocking (e.g. rustfs server).
-      ./patches/wasmer-futex-wake-lost-wakeup.patch
-      # fd_datasync/fd_sync denied with EACCES when path_open's rights
-      # delegation masked the implied FD_DATASYNC/FD_SYNC off files under
-      # mapped host dirs; rustfs object writes (fdatasync durability) 500'd.
-      ./patches/wasmer-fd-sync-rights-durability.patch
-      # fd_sync/fd_datasync refused a directory fd with EISDIR, which every
-      # caller that fsyncs a directory after a rename hits (initdb).
-      ./patches/wasmer-fd-sync-directory.patch
-      # Host hard links and their rename/unlink cache entries are broken.
-      ./patches/wasmer-path-rename-hardlink.patch
-      # fd_readdir cookies must remain valid while callers delete entries.
-      ./patches/wasmer-fd-readdir-stable-cookie.patch
-      # fd_filestat_get served a cached size that a rename left too large, so a
-      # read_exact sized from it hit UnexpectedEof; rustfs failed to delete an
-      # object whose metadata it had rewritten smaller.
-      ./patches/wasmer-fd-filestat-stale-size.patch
-      # isatty must be false for redirected stdio; see WASIX-TODO.md
-      ./patches/wasmer-isatty-non-tty-unknown.patch
-      # terminal programs need TERM; see WASIX-TODO.md
-      ./patches/wasmer-forward-term-on-tty.patch
-      # /dev/fd/<n> is the caller's fd n, which bash needs for <(...); see WASIX-TODO.md
-      ./patches/wasmer-dev-fd.patch
-      # the wasm_c_api_v0 host module edgejs's WebAssembly global imports
-      ./patches/wasmer-wasm-c-api-feature.patch
-    ];
     wasmerRuntime = wasmer.packages.${system}.wasmer.overrideAttrs (old: {
-      patches = (old.patches or []) ++ wasmerPatches;
       # The inherited artifact contains unpatched workspace crates and can
       # retain their rlibs and vtables after source patches are applied.
       cargoArtifacts = null;
