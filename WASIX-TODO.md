@@ -88,7 +88,7 @@ current toolchain before relying on it.
 - Symptom: a tokio worker parked on a futex never woke, hanging `join_all` and
   RustFS startup. `futex_wake` could select a waiter before its `Waker` was
   installed and skip an already sleeping waiter.
-- Fix (`patches/wasmer-futex-wake-lost-wakeup.patch`): wake the first waiter
+- Fix (`lh123/wasmer@wasix-compat-v7.5.0`): wake the first waiter
   with an installed waker, or record a bounded pending wake for a registering
   waiter. Upstreamable to wasmer.
 
@@ -117,7 +117,7 @@ current toolchain before relying on it.
   (ecstore `to_file_error`: PermissionDenied -> FileAccessDenied) to a 500
   `InternalError "File access denied"` on every `PutObject`/`UploadPart`, while
   bucket/metadata ops (no data fsync) succeed. `mc mb` worked, `mc pipe` 500'd.
-- Fix (`patches/wasmer-fd-sync-rights-durability.patch`): drop the rights gate
+- Fix (`lh123/wasmer@wasix-compat-v7.5.0`): drop the rights gate
   in both syscalls. fsync/fdatasync are durability barriers, not security
   capabilities (POSIX needs no special permission); sync any regular-file fd.
   With the fix a full `mc` put/get round-trip against `rustfs server` passes.
@@ -168,7 +168,7 @@ current toolchain before relying on it.
 - Symptom: RustFS beta.12 atomically publishes multipart metadata by renaming a
   transaction directory containing an inode also linked as sibling
   `part.1.meta`. `mc pipe` then hung after Wasmer panicked in `path_rename`.
-- Fix (`patches/wasmer-path-rename-hardlink.patch`): rebase descendants, keep
+- Fix (`lh123/wasmer@wasix-compat-v7.5.0`): rebase descendants, keep
   out-of-tree hard-link aliases unchanged, and replace the cached destination
   entry after the host rename. Materialize host hard links, forward them through
   dereferenceable wrappers, remove the cache-only success fallback, preserve
@@ -189,7 +189,7 @@ current toolchain before relying on it.
   smaller returned `Io error: Unexpected error` and left the object in place; a
   `cp` upload writes `xl.meta` once and is unaffected, and a restarted server
   deletes the same bytes fine.
-- Fix (`patches/wasmer-fd-filestat-stale-size.patch`): take the size from the
+- Fix (`lh123/wasmer@wasix-compat-v7.5.0`): take the size from the
   open handle, whose `size()` stats the host file, as `fd_sync` already does.
   Checked against wasmer 7.2.1; the whole `checks.rustfs` suite passes with it.
   Upstreamable to Wasmer.
@@ -205,7 +205,7 @@ current toolchain before relying on it.
 - Symptom: RustFS beta.12 multipart cleanup consistently left `old.meta` or
   `old.meta.absent` in `.part-txn-settled-*` directories, causing `mc pipe` to
   fail with errno 55.
-- Fix (`patches/wasmer-fd-readdir-stable-cookie.patch`): snapshot the sorted
+- Fix (`lh123/wasmer@wasix-compat-v7.5.0`): snapshot the sorted
   entries per open directory stream when reading from cookie zero, and use that
   stable snapshot for continuation calls. Duplicated descriptors share the
   snapshot. The Wasmer `fs_remove_dir_all` test now covers enough long-named
@@ -267,7 +267,7 @@ current toolchain before relying on it.
   helpers) therefore failed with ENOEXEC ("cannot execute binary file"),
   breaking every git transport test (clone/fetch/push over local/http/https/net)
   while the same tree on a real fs works.
-- Fixed: `patches/wasmer-webc-follow-symlinks.patch` resolves symlinks (relative
+- Fixed: `lh123/wasmer@wasix-compat-v7.5.0` resolves symlinks (relative
   targets against the link's parent, bounded loop) before opening, matching
   real-fs semantics. Verified: `checks.git` (all transport tests) passes with
   it. Vendored from python-pkgs; upstream to wasmerio/wasmer and drop once
@@ -291,7 +291,7 @@ current toolchain before relying on it.
 - `isatty(1)` was 1 even with stdout redirected, because `fdstat` reported the
   std fds as `CharacterDevice` unconditionally. Tools colorized into files (jq
   emitted ANSI into `>file`) and git ran its pager on a pipe.
-- Fixed by `patches/wasmer-isatty-non-tty-unknown.patch`: the std fds report
+- Fixed by `lh123/wasmer@wasix-compat-v7.5.0`: the std fds report
   `Unknown` unless the host stream is a terminal, and the `ArcFile`/`ArcBoxFile`
   wrappers forward the query (stdin is always wrapped).
 - Verified: `[ -t 0/1/2 ]` under bash is y on a pty and n on a pipe.
@@ -300,7 +300,7 @@ current toolchain before relying on it.
 
 - wasmer started processes with `TERM` unset, so ncurses aborted with "terminals
   database is inaccessible" (less, nano) and readline dropped line editing.
-- Fixed by `patches/wasmer-forward-term-on-tty.patch`: `wasmer run` forwards the
+- Fixed by `lh123/wasmer@wasix-compat-v7.5.0`: `wasmer run` forwards the
   host `TERM` when stdio is a terminal, on both the module and the webc path.
 - Verified: interactive bash on a pty reports the host `TERM` and enables
   bracketed paste; less renders full-screen.
@@ -352,7 +352,7 @@ current toolchain before relying on it.
   was built `--disable-process-substitution`.
 - `/dev/fd/<n>` cannot be a file: it names the _caller's_ fd n, and a shell
   hands the path to a child that must open it and get the pipe.
-- Fixed by `patches/wasmer-dev-fd.patch`: `path_open` resolves a `/dev/fd/<n>`
+- Fixed by `lh123/wasmer@wasix-compat-v7.5.0`: `path_open` resolves a `/dev/fd/<n>`
   path to a dup of the opener's fd n, so bash now builds with
   `bash_cv_dev_fd=standard`. Its own mkfifo-from-mknod fallback is compiled out,
   since `HAVE_DEV_FD` makes that path unreachable.
@@ -481,7 +481,7 @@ current toolchain before relying on it.
   barrier for that directory's own entries, which is how a caller persists a
   create or a rename. postgres fsyncs every directory under the data dir, so
   `initdb` died with `could not fsync file ".../base/1": Is a directory`.
-- Fixed by `patches/wasmer-fd-sync-directory.patch`: both calls return success
+- Fixed by `lh123/wasmer@wasix-compat-v7.5.0`: both calls return success
   for a directory. Verified with a C probe doing `fsync(open(".", O_RDONLY))`,
   which reports `Is a directory` on stock 7.2.1 and succeeds with the patch.
 - Neither call is a kernel-level barrier yet: `host_fs`'s `poll_flush` forwards
@@ -1074,7 +1074,7 @@ current toolchain before relying on it.
   by its forked sender and generator. `proc_fork` did not propagate the guest
   signal callback, while libc's copied registration flag prevented the child
   from registering it again.
-- Fix: `patches/wasmer-signal-inherit-on-fork.patch` makes `proc_fork` inherit
+- Fix: `lh123/wasmer@wasix-compat-v7.5.0` makes `proc_fork` inherit
   and re-resolve the callback. `rsync -a` now copies and exits successfully.
   Upstream to wasmer and drop the patch once merged.
 
