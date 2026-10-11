@@ -11,6 +11,7 @@
     chardet = "chardet";
     defusedxml = "defusedxml";
     dill = "dill";
+    dpkt = "dpkt";
     lxml = "lxml";
     odfpy = "odf";
     openpyxl = "openpyxl";
@@ -19,6 +20,7 @@
     puremagic = "puremagic";
     pypdf = "pypdf";
     python-docx = "docx";
+    python-pcapng = "pcapng";
     pyxlsb = "pyxlsb";
     xlrd = "xlrd";
   };

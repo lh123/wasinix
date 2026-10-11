@@ -84,6 +84,11 @@
   }
   {attr = "pyxlsb";}
   {attr = "xlrd";}
+  {attr = "dpkt";}
+  {
+    attr = "python-pcapng";
+    pyImport = "pcapng";
+  }
   {attr = "tomli";}
   {attr = "pytokens";}
   {attr = "black";} # mypyc speedups optional; ships a pure fallback
