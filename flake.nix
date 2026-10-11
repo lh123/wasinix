@@ -62,6 +62,8 @@
       ./patches/wasmer-forward-term-on-tty.patch
       # /dev/fd/<n> is the caller's fd n, which bash needs for <(...); see WASIX-TODO.md
       ./patches/wasmer-dev-fd.patch
+      # the wasm_c_api_v0 host module edgejs's WebAssembly global imports
+      ./patches/wasmer-wasm-c-api-feature.patch
     ];
     wasmerRuntime = wasmer.packages.${system}.wasmer.overrideAttrs (old: {
       patches = (old.patches or []) ++ wasmerPatches;

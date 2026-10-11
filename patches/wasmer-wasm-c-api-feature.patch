@@ -1,0 +1,14 @@
+# The wasm_c_api_v0 host module (guests calling the WebAssembly C API, e.g.
+# edgejs's WebAssembly global) is a CLI feature that upstream's Makefile enables
+# via build_wasmer_extra_features, but scripts/nix/pkg.nix builds wasmer-cli
+# straight from cargo without it.
+--- a/lib/cli/Cargo.toml
++++ b/lib/cli/Cargo.toml
+@@ -35,6 +35,7 @@
+   "journal",
+   "wasmer-artifact-create",
+   "static-artifact-create",
++  "wasm-c-api",
+ ]
+ 
+ # # Tun-tap client for connecting to Wasmer Edge VPNs
