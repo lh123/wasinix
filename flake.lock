@@ -199,7 +199,7 @@
         "wasinix": "wasinix"
       },
       "locked": {
-        "lastModified": 1786984815,
+        "lastModified": 1791702150,
         "narHash": "sha256-vl/34f5EXdK/7rSCCGcEY6A7IC90cPgIj6YmJ4j/GQ0=",
         "ref": "refs/heads/wasix-compat-v7.5.0",
         "rev": "363e1fd065ba1fe4df94de1aa190a80fcf457448",
