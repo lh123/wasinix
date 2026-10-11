@@ -20,10 +20,6 @@ and per-runtime details live in:
 - [`javascript.md`](javascript.md): the JS runtime in the sandbox webc, what
   runs in it, and the 2D canvas gap
 
-The sandbox webc assembled from those package sets is described in
-[`sandbox.md`](sandbox.md): the components it ships, time handling, and how to
-run it.
-
 ## Products and overlays
 
 `pkgs/products/<name>/package.nix` is the shared recipe for a product built both
