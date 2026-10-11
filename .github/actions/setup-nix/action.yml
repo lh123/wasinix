@@ -27,17 +27,15 @@ runs:
       with:
         # The fetcher-cache sqlite is the index into the git and tarball
         # caches; without it every input re-downloads and re-unpacks each
-        # run, the wasmer input slowest of all. It once pinned a divergent
-        # narHash for a tree carrying a submodule gitlink (vendor/phpix),
-        # which is gone from the tree. The restore-keys fallback also
-        # restores a cache saved for an earlier lock, and that is how the
-        # wasix-compat wasmer pin kept resolving to the previous rev's
-        # narHash; bump the version to drop those entries.
+        # run, the wasmer input slowest of all. A hit is only sound for the
+        # lock it was saved from: the git cache reuses the checkout it
+        # already has, so a cache restored after a pin bump reports the
+        # previous revision's narHash. Keep the lock in the key and take no
+        # fallback.
         path: ~/.cache/nix
         # a saved cache is immutable (no re-save on an existing key), so
         # the key version bumps whenever the cached shape changes
-        key: nix-flake-inputs-v4-${{ hashFiles('flake.lock') }}
-        restore-keys: nix-flake-inputs-v4-
+        key: nix-flake-inputs-v5-${{ hashFiles('flake.lock') }}
 
     # Restore/save split instead of the post-step: the post only saves on
     # job success, so a failed authorize (an invalid command) would discard
