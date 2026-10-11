@@ -13,6 +13,11 @@
       url = "git+https://github.com/lh123/wasmer?ref=wasix-compat-v7.5.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # The wasmer input is a git repo with submodules, and the build needs their
+    # contents. The fetcher default belongs in the spec: with it only in
+    # flake.lock, a re-lock fetches a different tree than eval does, and the two
+    # narHashes disagree.
+    self.submodules = true;
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
