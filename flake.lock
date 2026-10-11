@@ -200,7 +200,7 @@
       },
       "locked": {
         "lastModified": 1791702150,
-        "narHash": "sha256-vl/34f5EXdK/7rSCCGcEY6A7IC90cPgIj6YmJ4j/GQ0=",
+        "narHash": "sha256-N0rzsCWsNRqdvEacA9Sh+B4wgeLn8wkq95+64eAzqok=",
         "ref": "refs/heads/wasix-compat-v7.5.0",
         "rev": "363e1fd065ba1fe4df94de1aa190a80fcf457448",
         "revCount": 20818,

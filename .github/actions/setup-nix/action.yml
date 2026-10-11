@@ -29,13 +29,15 @@ runs:
         # caches; without it every input re-downloads and re-unpacks each
         # run, the wasmer input slowest of all. It once pinned a divergent
         # narHash for a tree carrying a submodule gitlink (vendor/phpix),
-        # which is gone from the tree; the key still pins the lock so a
-        # bumped input starts a fresh entry.
+        # which is gone from the tree. The restore-keys fallback also
+        # restores a cache saved for an earlier lock, and that is how the
+        # wasix-compat wasmer pin kept resolving to the previous rev's
+        # narHash; bump the version to drop those entries.
         path: ~/.cache/nix
         # a saved cache is immutable (no re-save on an existing key), so
         # the key version bumps whenever the cached shape changes
-        key: nix-flake-inputs-v3-${{ hashFiles('flake.lock') }}
-        restore-keys: nix-flake-inputs-v3-
+        key: nix-flake-inputs-v4-${{ hashFiles('flake.lock') }}
+        restore-keys: nix-flake-inputs-v4-
 
     # Restore/save split instead of the post-step: the post only saves on
     # job success, so a failed authorize (an invalid command) would discard
