@@ -20,12 +20,14 @@
   pic ? false,
   exnref ? false,
 }: let
-  version = "2026-07-30.1";
+  # lh123/wasix-libc tracks upstream main plus the timezone-data fix, so pin a
+  # revision rather than an upstream tag.
+  version = "2026-10-11.1";
   src = fetchFromGitHub {
-    owner = "wasix-org";
+    owner = "lh123";
     repo = "wasix-libc";
-    tag = "v${version}";
-    hash = "sha256-UGBHCYuUlNE6fAAUJnPxIgfJ7ujiUKGUrWU+BFKQfsQ=";
+    rev = "fe404855d387f95b91327605ec29b832b91f890f";
+    hash = "sha256-3MwdbiAoOwFDfnzgXSH3cs7XTZogkilSm/MD9r8EdqI=";
   };
 
   updateWrapper = buildPackages.writeShellApplication {

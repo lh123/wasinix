@@ -33,8 +33,8 @@ mode=$(jq -r '.mode // ""' <<<"$request")
 
 if [ "$mode" = revision ]; then
   read -r kind owner srcrepo want < <(jq -r '[.source.kind, .source.owner, .source.repo, .source.rev] | @tsv' <<<"$request")
-  if [ "$kind" != github ] || [ "$owner/$srcrepo" != wasix-org/wasix-libc ]; then
-    echo "wasix-libc revision source must be a GitHub wasix-org/wasix-libc" >&2
+  if [ "$kind" != github ] || [ "$owner/$srcrepo" != lh123/wasix-libc ]; then
+    echo "wasix-libc revision source must be a GitHub lh123/wasix-libc" >&2
     exit 1
   fi
 fi
@@ -50,7 +50,7 @@ bumped=()
 sync() {
   local sub=$1 owner=$2 repo=$3 block sha current old_hash new_hash
   sha=$(curl -fsSL -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/repos/wasix-org/wasix-libc/contents/$sub?ref=$rev" | jq -r .sha)
+    "https://api.github.com/repos/lh123/wasix-libc/contents/$sub?ref=$rev" | jq -r .sha)
   block="/repo = \"$repo\"/,/hash = \"/"
   current=$(sed -n "$block"'s/.*rev = "\([^"]*\)".*/\1/p' "$libc" | head -1)
   if [ -z "$current" ]; then
